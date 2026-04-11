@@ -169,8 +169,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let bevelInfluence = normalEdgeMask * 1.35;
   let normal = normalize(vec3f(-gradient * bevelInfluence, 1.0));
 
-  let pointerDelta = (globals.pointer.xy - vec2f(0.5, 0.5)) * vec2f(1.1, -0.7);
-  let lightDir = normalize(vec3f(globals.light.xy + pointerDelta, globals.light.z));
+  let lightDir = normalize(globals.light.xyz);
   let viewDir = vec3f(0.0, 0.0, 1.0);
   let halfVector = normalize(lightDir + viewDir);
 
@@ -232,6 +231,10 @@ function easeInOutSine(value: number) {
   return -(Math.cos(Math.PI * value) - 1) * 0.5
 }
 
+function degreesToRadians(value: number) {
+  return (value * Math.PI) / 180
+}
+
 type ShapeSettings = {
   centerX: number
   centerY: number
@@ -255,9 +258,10 @@ type RenderControls = {
   blur: number
   normalEdgeWidth: number
   motion: number
-  lightX: number
-  lightY: number
-  lightZ: number
+  lightAzimuth: number
+  lightAltitude: number
+  showLight: boolean
+  lightFollowsPointer: boolean
   debugView: 'final' | 'displacement' | 'normal'
   shapes: ShapeSettings[]
 }
@@ -276,9 +280,10 @@ function createDefaultControls(): RenderControls {
     blur: 8.5,
     normalEdgeWidth: 10,
     motion: 1,
-    lightX: -0.42,
-    lightY: -0.66,
-    lightZ: 1.15,
+    lightAzimuth: -148,
+    lightAltitude: 54,
+    showLight: false,
+    lightFollowsPointer: true,
     debugView: 'final',
     shapes: [
       {
@@ -303,6 +308,29 @@ function createDefaultControls(): RenderControls {
         radius: 0.07,
       },
     ],
+  }
+}
+
+function resolveLightDirection(
+  controls: Pick<RenderControls, 'lightAzimuth' | 'lightAltitude' | 'lightFollowsPointer'>,
+  pointer: { x: number; y: number },
+) {
+  const pointerInfluence = controls.lightFollowsPointer ? 1 : 0
+  const azimuthOffset = (pointer.x - 0.5) * 70 * pointerInfluence
+  const altitudeOffset = (pointer.y - 0.5) * -44 * pointerInfluence
+  const effectiveAzimuth = controls.lightAzimuth + azimuthOffset
+  const effectiveAltitude = clamp(controls.lightAltitude + altitudeOffset, 5, 85)
+  const effectiveAzimuthRadians = degreesToRadians(effectiveAzimuth)
+  const effectiveAltitudeRadians = degreesToRadians(effectiveAltitude)
+
+  return {
+    azimuth: effectiveAzimuth,
+    altitude: effectiveAltitude,
+    direction: {
+      x: Math.cos(effectiveAltitudeRadians) * Math.cos(effectiveAzimuthRadians),
+      y: Math.cos(effectiveAltitudeRadians) * Math.sin(effectiveAzimuthRadians),
+      z: Math.sin(effectiveAltitudeRadians),
+    },
   }
 }
 
@@ -373,6 +401,7 @@ export function GlassCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const frameRef = useRef<number | null>(null)
   const pointerRef = useRef({ x: 0.5, y: 0.5 })
+  const [pointerState, setPointerState] = useState({ x: 0.5, y: 0.5 })
   const [controls, setControls] = useState<RenderControls>(() => createDefaultControls())
   const controlsRef = useRef<RenderControls>(createDefaultControls())
   const [status, setStatus] = useState('Initializing WebGPU renderer...')
@@ -482,6 +511,7 @@ export function GlassCanvas() {
 
         const elapsedSeconds = (now - startTime) * 0.001
         const currentControls = controlsRef.current
+        const resolvedLight = resolveLightDirection(currentControls, pointerRef.current)
         resizeCanvas()
         writeShapes(device, shapesBuffer, targetCanvas.width, targetCanvas.height, elapsedSeconds, currentControls)
 
@@ -495,9 +525,9 @@ export function GlassCanvas() {
         globals[10] = 0
         globals[11] = 0
 
-        globals[12] = currentControls.lightX
-        globals[13] = currentControls.lightY
-        globals[14] = currentControls.lightZ
+        globals[12] = resolvedLight.direction.x
+        globals[13] = resolvedLight.direction.y
+        globals[14] = resolvedLight.direction.z
         globals[15] =
           currentControls.debugView === 'displacement'
             ? 1
@@ -553,14 +583,18 @@ export function GlassCanvas() {
 
   function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
     const bounds = event.currentTarget.getBoundingClientRect()
-    pointerRef.current = {
+    const nextPointer = {
       x: clamp((event.clientX - bounds.left) / bounds.width, 0, 1),
       y: clamp((event.clientY - bounds.top) / bounds.height, 0, 1),
     }
+    pointerRef.current = nextPointer
+    setPointerState(nextPointer)
   }
 
   function handlePointerLeave() {
-    pointerRef.current = { x: 0.5, y: 0.5 }
+    const centeredPointer = { x: 0.5, y: 0.5 }
+    pointerRef.current = centeredPointer
+    setPointerState(centeredPointer)
   }
 
   function updateControl<Key extends Exclude<keyof RenderControls, 'shapes'>>(key: Key, value: number) {
@@ -612,6 +646,22 @@ export function GlassCanvas() {
     setCopyStatus('')
   }
 
+  function handleLightOverlayToggle() {
+    setControls((current) => ({
+      ...current,
+      showLight: !current.showLight,
+    }))
+    setCopyStatus('')
+  }
+
+  function handleLightFollowToggle() {
+    setControls((current) => ({
+      ...current,
+      lightFollowsPointer: !current.lightFollowsPointer,
+    }))
+    setCopyStatus('')
+  }
+
   function renderSlider({
     label,
     value,
@@ -650,6 +700,17 @@ export function GlassCanvas() {
     )
   }
 
+  const resolvedLight = resolveLightDirection(controls, pointerState)
+  const effectiveLightDirection = resolvedLight.direction
+  const lightDirX = effectiveLightDirection.x
+  const lightDirY = effectiveLightDirection.y
+  const lightMarkerX = 50 + lightDirX * 23
+  const lightMarkerY = 50 + lightDirY * 23
+  const lightAngle = Math.atan2(lightDirY, lightDirX)
+  const lightRayLength = 18
+  const lightRayCenterX = 50 + lightDirX * 11
+  const lightRayCenterY = 50 + lightDirY * 11
+
   return (
     <div className="glass-stage">
       <canvas
@@ -658,6 +719,27 @@ export function GlassCanvas() {
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}
       />
+      {controls.showLight ? (
+        <div className="glass-stage__light-visual" aria-hidden="true">
+          <div
+            className="glass-stage__light-ray"
+            style={{
+              left: `${lightRayCenterX}%`,
+              top: `${lightRayCenterY}%`,
+              width: `${lightRayLength}%`,
+              transform: `translate(-50%, -50%) rotate(${lightAngle}rad)`,
+            }}
+          />
+          <div
+            className="glass-stage__light-marker"
+            style={{
+              left: `${lightMarkerX}%`,
+              top: `${lightMarkerY}%`,
+            }}
+          />
+          <div className="glass-stage__light-center" />
+        </div>
+      ) : null}
       <aside className="glass-stage__controls">
         <div className="glass-stage__controls-copy">
           <p className="glass-stage__eyebrow">WebGPU SDF Controls</p>
@@ -665,7 +747,8 @@ export function GlassCanvas() {
           <p className="glass-stage__description">
             Geometry sliders move and size the rounded-rectangle SDF primitives. Fusion softens the smooth union
             between them. Optics changes the refraction offset and frosted blur sampled from the procedural
-            background. Lighting drives the normal-based specular and Fresnel edge response.
+            background. Lighting uses azimuth and altitude angles to drive the normal-based specular and Fresnel
+            edge response.
           </p>
         </div>
 
@@ -759,35 +842,47 @@ export function GlassCanvas() {
 
         <section className="glass-stage__group">
           <h3>Lighting</h3>
+          <button
+            type="button"
+            className={
+              controls.showLight
+                ? 'glass-stage__toggle glass-stage__toggle--active'
+                : 'glass-stage__toggle'
+            }
+            onClick={handleLightOverlayToggle}
+          >
+            {controls.showLight ? 'Hide light visual' : 'Show light visual'}
+          </button>
+          <button
+            type="button"
+            className={
+              controls.lightFollowsPointer
+                ? 'glass-stage__toggle glass-stage__toggle--active'
+                : 'glass-stage__toggle'
+            }
+            onClick={handleLightFollowToggle}
+          >
+            {controls.lightFollowsPointer ? 'Light follows mouse' : 'Light ignores mouse'}
+          </button>
           {renderSlider({
-            label: 'Light X',
-            value: controls.lightX,
-            min: -1.5,
-            max: 1.5,
-            step: 0.01,
-            precision: 2,
-            description: 'Horizontal light direction used by the specular highlight.',
-            onChange: (value) => updateControl('lightX', value),
+            label: 'Azimuth',
+            value: controls.lightAzimuth,
+            min: -180,
+            max: 180,
+            step: 1,
+            precision: 0,
+            description: 'Horizontal angle around the viewport plane. 0 faces right, -90 points upward.',
+            onChange: (value) => updateControl('lightAzimuth', value),
           })}
           {renderSlider({
-            label: 'Light Y',
-            value: controls.lightY,
-            min: -1.5,
-            max: 1.5,
-            step: 0.01,
-            precision: 2,
-            description: 'Vertical light direction. Pointer movement offsets this live.',
-            onChange: (value) => updateControl('lightY', value),
-          })}
-          {renderSlider({
-            label: 'Light Z',
-            value: controls.lightZ,
-            min: 0.2,
-            max: 2.5,
-            step: 0.01,
-            precision: 2,
-            description: 'Forward light depth; higher values flatten the highlight falloff.',
-            onChange: (value) => updateControl('lightZ', value),
+            label: 'Altitude',
+            value: controls.lightAltitude,
+            min: 5,
+            max: 85,
+            step: 1,
+            precision: 0,
+            description: 'Elevation above the surface plane. Higher values aim the light more toward the viewer.',
+            onChange: (value) => updateControl('lightAltitude', value),
           })}
         </section>
 
