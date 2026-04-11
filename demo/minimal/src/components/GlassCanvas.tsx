@@ -12,10 +12,6 @@ const GPU_TEXTURE_USAGE = {
   RENDER_ATTACHMENT: 0x10,
 } as const
 
-function getMipLevelCount(width: number, height: number) {
-  return Math.floor(Math.log2(Math.max(width, height))) + 1
-}
-
 function createTextureFromSource(
   device: GPUDevice,
   source: ImageBitmap | HTMLCanvasElement,
@@ -78,65 +74,113 @@ function createConstrainedCanvas(
   }
 }
 
-function createMipmappedTextureFromSource(
-  device: GPUDevice,
-  source: ImageBitmap | HTMLCanvasElement,
-  width: number,
-  height: number,
-) {
-  const mipLevelCount = getMipLevelCount(width, height)
-  const texture = device.createTexture({
-    size: {
-      width,
-      height,
-      depthOrArrayLayers: 1,
-    },
-    format: 'rgba8unorm',
-    mipLevelCount,
-    usage:
-      GPU_TEXTURE_USAGE.TEXTURE_BINDING |
-      GPU_TEXTURE_USAGE.COPY_DST |
-      GPU_TEXTURE_USAGE.RENDER_ATTACHMENT,
-  })
+const BACKGROUND_BLIT_SHADER = /* wgsl */ `
+struct Globals {
+  viewport: vec4f,
+  controls: vec4f,
+  pointer: vec4f,
+  light: vec4f,
+  specularPrimary: vec4f,
+  specularSecondary: vec4f,
+};
 
-  for (let mipLevel = 0; mipLevel < mipLevelCount; mipLevel += 1) {
-    const mipWidth = Math.max(1, width >> mipLevel)
-    const mipHeight = Math.max(1, height >> mipLevel)
-    let mipSource: ImageBitmap | HTMLCanvasElement = source
+@group(0) @binding(0) var<uniform> globals: Globals;
+@group(0) @binding(1) var backgroundSampler: sampler;
+@group(0) @binding(2) var sourceTexture: texture_2d<f32>;
 
-    if (mipLevel > 0) {
-      const canvas = document.createElement('canvas')
-      canvas.width = mipWidth
-      canvas.height = mipHeight
-      const context = canvas.getContext('2d')
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+};
 
-      if (!context) {
-        throw new Error('Unable to create a 2D canvas for mip generation.')
-      }
-
-      context.imageSmoothingEnabled = true
-      context.imageSmoothingQuality = 'high'
-      context.clearRect(0, 0, mipWidth, mipHeight)
-      context.drawImage(source, 0, 0, width, height, 0, 0, mipWidth, mipHeight)
-      mipSource = canvas
-    }
-
-    device.queue.copyExternalImageToTexture(
-      { source: mipSource },
-      { texture, mipLevel },
-      {
-        width: mipWidth,
-        height: mipHeight,
-        depthOrArrayLayers: 1,
-      },
-    )
+fn coverUv(uv: vec2f) -> vec2f {
+  let viewportAspect = globals.viewport.x / max(globals.viewport.y, 1.0);
+  let imageAspect = globals.viewport.z / max(globals.viewport.w, 1.0);
+  let focalOffset = vec2f(0.0, -0.12);
+  if (viewportAspect > imageAspect) {
+    return clamp(vec2f(uv.x, (uv.y - 0.5) * (imageAspect / viewportAspect) + 0.5) + focalOffset, vec2f(0.0), vec2f(1.0));
   }
-
-  return {
-    texture,
-    mipLevelCount,
-  }
+  return clamp(vec2f((uv.x - 0.5) * (viewportAspect / imageAspect) + 0.5, uv.y) + focalOffset, vec2f(0.0), vec2f(1.0));
 }
+
+@vertex
+fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+  var positions = array<vec2f, 3>(
+    vec2f(-1.0, -3.0),
+    vec2f(-1.0, 1.0),
+    vec2f(3.0, 1.0),
+  );
+
+  let position = positions[vertexIndex];
+  var output: VertexOutput;
+  output.position = vec4f(position, 0.0, 1.0);
+  output.uv = position * 0.5 + 0.5;
+  return output;
+}
+
+@fragment
+fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+  let color = textureSampleLevel(sourceTexture, backgroundSampler, coverUv(in.uv), 0.0).rgb;
+  return vec4f(color, 1.0);
+}
+`
+
+const BLUR_SHADER = /* wgsl */ `
+struct BlurParams {
+  direction: vec2f,
+  radius: f32,
+  _padding: f32,
+};
+
+@group(0) @binding(0) var blurSampler: sampler;
+@group(0) @binding(1) var inputTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> blurParams: BlurParams;
+
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+};
+
+@vertex
+fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+  var positions = array<vec2f, 3>(
+    vec2f(-1.0, -3.0),
+    vec2f(-1.0, 1.0),
+    vec2f(3.0, 1.0),
+  );
+
+  let position = positions[vertexIndex];
+  var output: VertexOutput;
+  output.position = vec4f(position, 0.0, 1.0);
+  output.uv = position * 0.5 + 0.5;
+  return output;
+}
+
+fn gaussianWeight(index: f32, sigma: f32) -> f32 {
+  return exp(-0.5 * index * index / max(sigma * sigma, 0.0001));
+}
+
+@fragment
+fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+  let textureSize = vec2f(textureDimensions(inputTexture));
+  let blurStep = blurParams.direction / max(textureSize, vec2f(1.0)) * (blurParams.radius / 4.0);
+  let sigma = 2.0;
+  let clampedUv = clamp(in.uv, vec2f(0.0), vec2f(1.0));
+
+  var color = vec3f(0.0);
+  var totalWeight = 0.0;
+
+  for (var i = -4; i <= 4; i = i + 1) {
+    let index = f32(i);
+    let weight = gaussianWeight(index, sigma);
+    let sampleUv = clamp(clampedUv + blurStep * index, vec2f(0.0), vec2f(1.0));
+    color = color + textureSampleLevel(inputTexture, blurSampler, sampleUv, 0.0).rgb * weight;
+    totalWeight = totalWeight + weight;
+  }
+
+  return vec4f(color / max(totalWeight, 0.0001), 1.0);
+}
+`
 
 const GLASS_SHADER = /* wgsl */ `
 struct Globals {
@@ -215,16 +259,6 @@ fn sdfGradient(pos: vec2f) -> vec2f {
   return gradient / magnitude;
 }
 
-fn coverUv(uv: vec2f) -> vec2f {
-  let viewportAspect = globals.viewport.x / max(globals.viewport.y, 1.0);
-  let imageAspect = globals.viewport.z / max(globals.viewport.w, 1.0);
-  let focalOffset = vec2f(0.0, -0.12);
-  if (viewportAspect > imageAspect) {
-    return vec2f(uv.x, (uv.y - 0.5) * (imageAspect / viewportAspect) + 0.5) + focalOffset;
-  }
-  return vec2f((uv.x - 0.5) * (viewportAspect / imageAspect) + 0.5, uv.y) + focalOffset;
-}
-
 fn lineMask(value: f32, thickness: f32) -> f32 {
   return 1.0 - smoothstep(0.0, thickness, abs(value));
 }
@@ -234,11 +268,9 @@ fn sampleBackgroundSharp(uv: vec2f) -> vec3f {
   return textureSampleLevel(backgroundTextureSharp, backgroundSampler, clampedUv, 0.0).rgb;
 }
 
-fn sampleBackgroundBlurred(uv: vec2f, radiusPx: f32) -> vec3f {
+fn sampleBackgroundBlurred(uv: vec2f) -> vec3f {
   let clampedUv = clamp(uv, vec2f(0.0), vec2f(1.0));
-  let maxLod = globals.pointer.z;
-  let lod = clamp(log2(max(radiusPx, 1.0)), 0.0, maxLod);
-  return textureSampleLevel(backgroundTextureBlurred, backgroundSampler, clampedUv, lod).rgb;
+  return textureSampleLevel(backgroundTextureBlurred, backgroundSampler, clampedUv, 0.0).rgb;
 }
 
 @vertex
@@ -259,8 +291,7 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 @fragment
 fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let fragCoord = in.uv * globals.viewport.xy;
-  let sceneUv = coverUv(in.uv);
-  let background = sampleBackgroundSharp(sceneUv);
+  let background = sampleBackgroundSharp(in.uv);
 
   let distance = sceneSdf(fragCoord);
   let fillMask = 1.0 - smoothstep(0.0, 1.4, distance);
@@ -280,9 +311,9 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let halfVector = normalize(lightDir + viewDir);
 
   let distortion = globals.controls.y * edgeMask;
-  let refractedUv = coverUv(in.uv + gradient * distortion / globals.viewport.xy);
+  let refractedUv = in.uv + gradient * distortion / globals.viewport.xy;
   let refracted = sampleBackgroundSharp(refractedUv);
-  let blurred = sampleBackgroundBlurred(refractedUv, globals.controls.z);
+  let blurred = sampleBackgroundBlurred(refractedUv);
   let displacementDebug = vec3f(
     gradient.x * edgeMask * 0.5 + 0.5,
     gradient.y * edgeMask * 0.5 + 0.5,
@@ -586,12 +617,6 @@ export function GlassCanvas() {
         backgroundBitmap.height,
         4096,
       )
-      const blurTextureSource = createConstrainedCanvas(
-        backgroundBitmap,
-        backgroundBitmap.width,
-        backgroundBitmap.height,
-        2048,
-      )
 
       const presentationFormat = gpuNavigator.gpu.getPreferredCanvasFormat()
       const globalsBuffer = device.createBuffer({
@@ -603,28 +628,62 @@ export function GlassCanvas() {
         size: MAX_SHAPES * 4 * 4 * 2,
         usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
       })
+      const blurHorizontalBuffer = device.createBuffer({
+        size: 4 * 4,
+        usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      })
+      const blurVerticalBuffer = device.createBuffer({
+        size: 4 * 4,
+        usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST,
+      })
 
-      const backgroundSharpTexture = createTextureFromSource(
+      const backgroundSourceTexture = createTextureFromSource(
         device,
         sharpTextureSource.canvas,
         sharpTextureSource.width,
         sharpTextureSource.height,
       )
-      const { texture: backgroundBlurTexture, mipLevelCount: backgroundMipLevelCount } =
-        createMipmappedTextureFromSource(
-          device,
-          blurTextureSource.canvas,
-          blurTextureSource.width,
-          blurTextureSource.height,
-        )
       backgroundBitmap.close()
 
       const backgroundSampler = device.createSampler({
         magFilter: 'linear',
         minFilter: 'linear',
-        mipmapFilter: 'linear',
         addressModeU: 'clamp-to-edge',
         addressModeV: 'clamp-to-edge',
+      })
+
+      const blitShaderModule = device.createShaderModule({ code: BACKGROUND_BLIT_SHADER })
+      const blitPipeline = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: {
+          module: blitShaderModule,
+          entryPoint: 'vertexMain',
+        },
+        fragment: {
+          module: blitShaderModule,
+          entryPoint: 'fragmentMain',
+          targets: [{ format: 'rgba8unorm' }],
+        },
+        primitive: {
+          topology: 'triangle-list',
+        },
+      })
+
+      const blurShaderModule = device.createShaderModule({ code: BLUR_SHADER })
+      const blurPipeline = device.createRenderPipeline({
+        layout: 'auto',
+        vertex: {
+          module: blurShaderModule,
+          entryPoint: 'vertexMain',
+        },
+        fragment: {
+          module: blurShaderModule,
+          entryPoint: 'fragmentMain',
+          targets: [{ format: 'rgba8unorm' }],
+        },
+        primitive: {
+          topology: 'triangle-list',
+        },
       })
 
       const shaderModule = device.createShaderModule({ code: GLASS_SHADER })
@@ -644,19 +703,77 @@ export function GlassCanvas() {
         },
       })
 
-      const bindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: globalsBuffer } },
-          { binding: 1, resource: { buffer: shapesBuffer } },
-          { binding: 2, resource: backgroundSampler },
-          { binding: 3, resource: backgroundSharpTexture.createView() },
-          { binding: 4, resource: backgroundBlurTexture.createView() },
-        ],
-      })
-
       const globals = new Float32Array(24)
+      const blurHorizontalParams = new Float32Array(4)
+      const blurVerticalParams = new Float32Array(4)
       const startTime = performance.now()
+      let backgroundFrameTexture: GPUTexture | null = null
+      let backgroundBlurPingTexture: GPUTexture | null = null
+      let backgroundBlurTexture: GPUTexture | null = null
+      let backgroundBlitBindGroup: GPUBindGroup | null = null
+      let blurHorizontalBindGroup: GPUBindGroup | null = null
+      let blurVerticalBindGroup: GPUBindGroup | null = null
+      let mainBindGroup: GPUBindGroup | null = null
+
+      function createRenderTarget(width: number, height: number) {
+        return device.createTexture({
+          size: {
+            width,
+            height,
+            depthOrArrayLayers: 1,
+          },
+          format: 'rgba8unorm',
+          usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.RENDER_ATTACHMENT,
+        })
+      }
+
+      function rebuildRenderTargets(width: number, height: number) {
+        backgroundFrameTexture?.destroy()
+        backgroundBlurPingTexture?.destroy()
+        backgroundBlurTexture?.destroy()
+
+        backgroundFrameTexture = createRenderTarget(width, height)
+        backgroundBlurPingTexture = createRenderTarget(width, height)
+        backgroundBlurTexture = createRenderTarget(width, height)
+
+        backgroundBlitBindGroup = device.createBindGroup({
+          layout: blitPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: globalsBuffer } },
+            { binding: 1, resource: backgroundSampler },
+            { binding: 2, resource: backgroundSourceTexture.createView() },
+          ],
+        })
+
+        blurHorizontalBindGroup = device.createBindGroup({
+          layout: blurPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: backgroundSampler },
+            { binding: 1, resource: backgroundFrameTexture.createView() },
+            { binding: 2, resource: { buffer: blurHorizontalBuffer } },
+          ],
+        })
+
+        blurVerticalBindGroup = device.createBindGroup({
+          layout: blurPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: backgroundSampler },
+            { binding: 1, resource: backgroundBlurPingTexture.createView() },
+            { binding: 2, resource: { buffer: blurVerticalBuffer } },
+          ],
+        })
+
+        mainBindGroup = device.createBindGroup({
+          layout: pipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: globalsBuffer } },
+            { binding: 1, resource: { buffer: shapesBuffer } },
+            { binding: 2, resource: backgroundSampler },
+            { binding: 3, resource: backgroundFrameTexture.createView() },
+            { binding: 4, resource: backgroundBlurTexture.createView() },
+          ],
+        })
+      }
 
       function resizeCanvas() {
         const bounds = targetCanvas.getBoundingClientRect()
@@ -667,6 +784,7 @@ export function GlassCanvas() {
         if (targetCanvas.width !== nextWidth || targetCanvas.height !== nextHeight) {
           targetCanvas.width = nextWidth
           targetCanvas.height = nextHeight
+          rebuildRenderTargets(nextWidth, nextHeight)
         }
 
         targetContext.configure({
@@ -699,7 +817,7 @@ export function GlassCanvas() {
 
         globals[8] = pointerRef.current.x
         globals[9] = pointerRef.current.y
-        globals[10] = backgroundMipLevelCount - 1
+        globals[10] = 0
         globals[11] = currentControls.showSdfBoundary ? 1 : 0
 
         globals[12] = resolvedLight.direction.x
@@ -723,8 +841,79 @@ export function GlassCanvas() {
         globals[23] = currentControls.secondarySpecularTint
 
         device.queue.writeBuffer(globalsBuffer, 0, globals)
+        blurHorizontalParams[0] = 1
+        blurHorizontalParams[1] = 0
+        blurHorizontalParams[2] = currentControls.blur
+        blurHorizontalParams[3] = 0
+        blurVerticalParams[0] = 0
+        blurVerticalParams[1] = 1
+        blurVerticalParams[2] = currentControls.blur
+        blurVerticalParams[3] = 0
+        device.queue.writeBuffer(blurHorizontalBuffer, 0, blurHorizontalParams)
+        device.queue.writeBuffer(blurVerticalBuffer, 0, blurVerticalParams)
 
         const encoder = device.createCommandEncoder()
+        const backgroundFrameView = backgroundFrameTexture?.createView()
+        const backgroundBlurPingView = backgroundBlurPingTexture?.createView()
+        const backgroundBlurView = backgroundBlurTexture?.createView()
+
+        if (
+          !backgroundFrameView ||
+          !backgroundBlurPingView ||
+          !backgroundBlurView ||
+          !backgroundBlitBindGroup ||
+          !blurHorizontalBindGroup ||
+          !blurVerticalBindGroup ||
+          !mainBindGroup
+        ) {
+          return
+        }
+
+        const blitPass = encoder.beginRenderPass({
+          colorAttachments: [
+            {
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: 'clear',
+              storeOp: 'store',
+              view: backgroundFrameView,
+            },
+          ],
+        })
+        blitPass.setPipeline(blitPipeline)
+        blitPass.setBindGroup(0, backgroundBlitBindGroup)
+        blitPass.draw(3)
+        blitPass.end()
+
+        const blurHorizontalPass = encoder.beginRenderPass({
+          colorAttachments: [
+            {
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: 'clear',
+              storeOp: 'store',
+              view: backgroundBlurPingView,
+            },
+          ],
+        })
+        blurHorizontalPass.setPipeline(blurPipeline)
+        blurHorizontalPass.setBindGroup(0, blurHorizontalBindGroup)
+        blurHorizontalPass.draw(3)
+        blurHorizontalPass.end()
+
+        const blurVerticalPass = encoder.beginRenderPass({
+          colorAttachments: [
+            {
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: 'clear',
+              storeOp: 'store',
+              view: backgroundBlurView,
+            },
+          ],
+        })
+        blurVerticalPass.setPipeline(blurPipeline)
+        blurVerticalPass.setBindGroup(0, blurVerticalBindGroup)
+        blurVerticalPass.draw(3)
+        blurVerticalPass.end()
+
         const pass = encoder.beginRenderPass({
           colorAttachments: [
             {
@@ -737,7 +926,7 @@ export function GlassCanvas() {
         })
 
         pass.setPipeline(pipeline)
-        pass.setBindGroup(0, bindGroup)
+        pass.setBindGroup(0, mainBindGroup)
         pass.draw(3)
         pass.end()
 
