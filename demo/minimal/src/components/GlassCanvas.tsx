@@ -80,8 +80,8 @@ struct Globals {
   controls: vec4f,
   pointer: vec4f,
   light: vec4f,
-  specularPrimary: vec4f,
-  specularSecondary: vec4f,
+  specular: vec4f,
+  rim: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;
@@ -188,8 +188,8 @@ struct Globals {
   controls: vec4f,
   pointer: vec4f,
   light: vec4f,
-  specularPrimary: vec4f,
-  specularSecondary: vec4f,
+  specular: vec4f,
+  rim: vec4f,
 };
 
 struct ShapeData {
@@ -295,46 +295,45 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
 
   let distance = sceneSdf(fragCoord);
   let fillMask = 1.0 - smoothstep(0.0, 1.4, distance);
-  let edgeMask = smoothstep(34.0, 0.0, abs(distance));
   let interiorMask = smoothstep(8.0, 92.0, -distance);
-  let normalEdgeMask = smoothstep(globals.controls.w, 0.0, abs(distance));
   let sdfBoundaryMask = 1.0 - smoothstep(0.0, 1.2, abs(distance));
 
   let gradient = sdfGradient(fragCoord);
-  let bevelInfluence = normalEdgeMask * 1.35;
-  let normalOuter = normalize(vec3f(-gradient * bevelInfluence, 1.0));
-  let normalInner = normalize(vec3f(gradient * bevelInfluence, 1.0));
-  let normal = normalOuter;
+  let flatNormal = vec3f(0.0, 0.0, 1.0);
+  let pixelWidth = max(fwidth(distance), 0.75);
+  let rimWidth = max(globals.specular.y, pixelWidth * 2.0);
+  let rimBandMask = (1.0 - smoothstep(0.0, pixelWidth, distance)) * (1.0 - smoothstep(rimWidth, rimWidth + pixelWidth, -distance));
+  let rimProgress = clamp(1.0 + distance / rimWidth, 0.0, 1.0);
+  let rimProfile = rimBandMask * pow(rimProgress, 3.4);
+  let rimTilt = tan(globals.rim.x);
+  let rimNormal = normalize(vec3f(-gradient * rimProfile * rimTilt, 1.0));
 
   let lightDir = normalize(globals.light.xyz);
   let viewDir = vec3f(0.0, 0.0, 1.0);
   let halfVector = normalize(lightDir + viewDir);
+  let mirroredHalfVector = normalize(vec3f(-halfVector.xy, halfVector.z));
 
-  let distortion = globals.controls.y * edgeMask;
+  let refractionMask = smoothstep(globals.controls.w * 3.0, 0.0, abs(distance));
+  let distortion = globals.controls.y * refractionMask;
   let refractedUv = in.uv + gradient * distortion / globals.viewport.xy;
   let blurred = sampleBackgroundBlurred(refractedUv);
   let displacementDebug = vec3f(
-    gradient.x * edgeMask * 0.5 + 0.5,
-    gradient.y * edgeMask * 0.5 + 0.5,
-    edgeMask
+    gradient.x * refractionMask * 0.5 + 0.5,
+    gradient.y * refractionMask * 0.5 + 0.5,
+    refractionMask
   );
-  let normalDebug = normalOuter * 0.5 + vec3f(0.5);
+  let normalDebug = rimNormal * 0.5 + vec3f(0.5);
 
   var glass = blurred;
   glass = mix(glass, vec3f(0.93, 0.96, 1.0), 0.12 + 0.08 * interiorMask);
 
-  let outerSpecularMask = smoothstep(globals.specularPrimary.y, 0.0, abs(distance));
-  let innerSpecularMask = smoothstep(globals.specularSecondary.y, 0.0, abs(distance));
-  let outerSpecular = pow(max(dot(normalOuter, halfVector), 0.0), globals.specularPrimary.z);
-  let innerSpecular = pow(max(dot(normalInner, halfVector), 0.0), globals.specularSecondary.z);
+  let rimSpecular = pow(max(dot(rimNormal, halfVector), 0.0), globals.specular.z);
+  let mirroredRimSpecular = pow(max(dot(rimNormal, mirroredHalfVector), 0.0), globals.specular.z);
 
   let borderHue = 0.5 + 0.5 * gradient.x;
   let prismaticBorder = mix(vec3f(0.48, 0.88, 0.96), vec3f(1.0, 0.73, 0.9), borderHue);
-  let primarySpecularTint = mix(vec3f(1.0), prismaticBorder, globals.specularPrimary.w);
-  let secondarySpecularTint = mix(vec3f(1.0), prismaticBorder, globals.specularSecondary.w);
-  let borderLight =
-    primarySpecularTint * outerSpecular * globals.specularPrimary.x * outerSpecularMask +
-    secondarySpecularTint * innerSpecular * globals.specularSecondary.x * innerSpecularMask;
+  let specularTint = mix(vec3f(1.0), prismaticBorder, globals.specular.w);
+  let borderLight = specularTint * (rimSpecular + mirroredRimSpecular) * globals.specular.x * rimBandMask;
 
   let shadow = vec3f(0.0, 0.03, 0.08) * smoothstep(22.0, 0.0, distance - 1.0) * 0.16;
 
@@ -396,18 +395,15 @@ type RenderControls = {
   unionSoftness: number
   distortion: number
   blur: number
-  normalEdgeWidth: number
+  refractionWidth: number
   motion: number
   lightAzimuth: number
   lightAltitude: number
-  primarySpecularStrength: number
-  primarySpecularWidth: number
-  primarySpecularSharpness: number
-  primarySpecularTint: number
-  secondarySpecularStrength: number
-  secondarySpecularWidth: number
-  secondarySpecularSharpness: number
-  secondarySpecularTint: number
+  specularStrength: number
+  specularWidth: number
+  rimAngle: number
+  specularSharpness: number
+  specularTint: number
   showSdfBoundary: boolean
   showLight: boolean
   lightFollowsPointer: boolean
@@ -427,29 +423,26 @@ function createDefaultControls(): RenderControls {
     unionSoftness: 56,
     distortion: 18,
     blur: 8.5,
-    normalEdgeWidth: 10,
-    motion: 1,
-    lightAzimuth: -148,
-    lightAltitude: 54,
-    primarySpecularStrength: 1,
-    primarySpecularWidth: 18,
-    primarySpecularSharpness: 96,
-    primarySpecularTint: 0,
-    secondarySpecularStrength: 1,
-    secondarySpecularWidth: 18,
-    secondarySpecularSharpness: 96,
-    secondarySpecularTint: 0,
+    refractionWidth: 10,
+    motion: 0,
+    lightAzimuth: -48,
+    lightAltitude: 25,
+    specularStrength: 2,
+    specularWidth: 10.75,
+    rimAngle: 27,
+    specularSharpness: 46,
+    specularTint: 0,
     showSdfBoundary: false,
     showLight: false,
     lightFollowsPointer: false,
     debugView: 'final',
     shapes: [
       {
-        centerX: 0.65,
+        centerX: 0.685,
         centerY: 0.49,
-        halfWidth: 0.22,
-        halfHeight: 0.18,
-        radius: 0.1,
+        halfWidth: 0.095,
+        halfHeight: 0.205,
+        radius: 0.07,
       },
       {
         centerX: 0.33,
@@ -812,7 +805,7 @@ export function GlassCanvas() {
         globals[4] = currentControls.unionSoftness
         globals[5] = currentControls.distortion * currentDpr
         globals[6] = currentControls.blur
-        globals[7] = currentControls.normalEdgeWidth * currentDpr
+        globals[7] = currentControls.refractionWidth * currentDpr
 
         globals[8] = pointerRef.current.x
         globals[9] = pointerRef.current.y
@@ -829,15 +822,15 @@ export function GlassCanvas() {
               ? 2
               : 0
 
-        globals[16] = currentControls.primarySpecularStrength
-        globals[17] = currentControls.primarySpecularWidth * currentDpr
-        globals[18] = currentControls.primarySpecularSharpness
-        globals[19] = currentControls.primarySpecularTint
+        globals[16] = currentControls.specularStrength
+        globals[17] = currentControls.specularWidth * currentDpr
+        globals[18] = currentControls.specularSharpness
+        globals[19] = currentControls.specularTint
 
-        globals[20] = currentControls.secondarySpecularStrength
-        globals[21] = currentControls.secondarySpecularWidth * currentDpr
-        globals[22] = currentControls.secondarySpecularSharpness
-        globals[23] = currentControls.secondarySpecularTint
+        globals[20] = degreesToRadians(clamp(currentControls.rimAngle, 0, 89.5))
+        globals[21] = 0
+        globals[22] = 0
+        globals[23] = 0
 
         device.queue.writeBuffer(globalsBuffer, 0, globals)
         blurHorizontalParams[0] = 1
@@ -1213,14 +1206,14 @@ export function GlassCanvas() {
             onChange: (value) => updateControl('blur', value),
           })}
           {renderSlider({
-            label: 'Normal edge',
-            value: controls.normalEdgeWidth,
+            label: 'Refraction width',
+            value: controls.refractionWidth,
             min: 1,
             max: 24,
             step: 0.25,
             precision: 2,
-            description: 'How tightly the normal map bends away from the viewer near the SDF edge.',
-            onChange: (value) => updateControl('normalEdgeWidth', value),
+            description: 'How far inward from the boundary the refraction offset stays active.',
+            onChange: (value) => updateControl('refractionWidth', value),
           })}
           {renderSlider({
             label: 'Motion',
@@ -1283,84 +1276,54 @@ export function GlassCanvas() {
         <section className="glass-stage__group">
           <h3>Specular</h3>
           {renderSlider({
-            label: 'Primary strength',
-            value: controls.primarySpecularStrength,
+            label: 'Strength',
+            value: controls.specularStrength,
             min: 0,
             max: 2,
             step: 0.05,
             precision: 2,
             description: 'Intensity of the outer highlight lobe.',
-            onChange: (value) => updateControl('primarySpecularStrength', value),
+            onChange: (value) => updateControl('specularStrength', value),
           })}
           {renderSlider({
-            label: 'Primary width',
-            value: controls.primarySpecularWidth,
+            label: 'Width',
+            value: controls.specularWidth,
             min: 2,
             max: 40,
             step: 0.25,
             precision: 2,
             description: 'How wide the outer highlight can spread away from the SDF boundary.',
-            onChange: (value) => updateControl('primarySpecularWidth', value),
+            onChange: (value) => updateControl('specularWidth', value),
           })}
           {renderSlider({
-            label: 'Primary sharpness',
-            value: controls.primarySpecularSharpness,
+            label: 'Rim angle',
+            value: controls.rimAngle,
+            min: 0,
+            max: 89.5,
+            step: 0.5,
+            precision: 1,
+            description: 'Maximum tilt angle of the rim normal at the boundary. 0 keeps the rim flat; 90 approaches perpendicular to the glass face.',
+            onChange: (value) => updateControl('rimAngle', value),
+          })}
+          {renderSlider({
+            label: 'Sharpness',
+            value: controls.specularSharpness,
             min: 8,
             max: 192,
             step: 1,
             precision: 0,
             description: 'Specular exponent for the outer lobe. Higher values make it tighter.',
-            onChange: (value) => updateControl('primarySpecularSharpness', value),
+            onChange: (value) => updateControl('specularSharpness', value),
           })}
           {renderSlider({
-            label: 'Primary tint',
-            value: controls.primarySpecularTint,
+            label: 'Tint',
+            value: controls.specularTint,
             min: 0,
             max: 1,
             step: 0.01,
             precision: 2,
             description: 'Blend from white to the prismatic border tint on the outer lobe.',
-            onChange: (value) => updateControl('primarySpecularTint', value),
-          })}
-          {renderSlider({
-            label: 'Secondary strength',
-            value: controls.secondarySpecularStrength,
-            min: 0,
-            max: 2,
-            step: 0.05,
-            precision: 2,
-            description: 'Intensity of the opposite-side internal highlight lobe.',
-            onChange: (value) => updateControl('secondarySpecularStrength', value),
-          })}
-          {renderSlider({
-            label: 'Secondary width',
-            value: controls.secondarySpecularWidth,
-            min: 2,
-            max: 40,
-            step: 0.25,
-            precision: 2,
-            description: 'How wide the opposite-side lobe can spread from the boundary.',
-            onChange: (value) => updateControl('secondarySpecularWidth', value),
-          })}
-          {renderSlider({
-            label: 'Secondary sharpness',
-            value: controls.secondarySpecularSharpness,
-            min: 8,
-            max: 192,
-            step: 1,
-            precision: 0,
-            description: 'Specular exponent for the opposite-side lobe.',
-            onChange: (value) => updateControl('secondarySpecularSharpness', value),
-          })}
-          {renderSlider({
-            label: 'Secondary tint',
-            value: controls.secondarySpecularTint,
-            min: 0,
-            max: 1,
-            step: 0.01,
-            precision: 2,
-            description: 'Blend from white to the prismatic border tint on the opposite-side lobe.',
-            onChange: (value) => updateControl('secondarySpecularTint', value),
+            onChange: (value) => updateControl('specularTint', value),
           })}
         </section>
 
