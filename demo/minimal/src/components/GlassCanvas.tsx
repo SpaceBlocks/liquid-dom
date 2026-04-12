@@ -467,10 +467,15 @@ function resolveLightDirection(
   pointer: { x: number; y: number },
 ) {
   const pointerInfluence = controls.lightFollowsPointer ? 1 : 0
-  const azimuthOffset = (pointer.x - 0.5) * 70 * pointerInfluence
-  const altitudeOffset = (pointer.y - 0.5) * -44 * pointerInfluence
-  const effectiveAzimuth = controls.lightAzimuth + azimuthOffset
-  const effectiveAltitude = clamp(controls.lightAltitude + altitudeOffset, 5, 85)
+  const pointerVectorX = pointer.x - 0.5
+  const pointerVectorY = 0.5 - pointer.y
+  const pointerMagnitude = Math.hypot(pointerVectorX, pointerVectorY)
+  const pointerAzimuth =
+    pointerMagnitude > 0.0001
+      ? (Math.atan2(pointerVectorY, pointerVectorX) * 180) / Math.PI
+      : controls.lightAzimuth
+  const effectiveAzimuth = controls.lightAzimuth * (1 - pointerInfluence) + pointerAzimuth * pointerInfluence
+  const effectiveAltitude = clamp(controls.lightAltitude, 5, 85)
   const effectiveAzimuthRadians = degreesToRadians(effectiveAzimuth)
   const effectiveAltitudeRadians = degreesToRadians(effectiveAltitude)
 
