@@ -402,8 +402,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   );
   let normalDebug = rimNormal * 0.5 + vec3f(0.5);
 
-  var glass = blurred;
-  glass = mix(glass, vec3f(0.93, 0.96, 1.0), 0.12 + 0.08 * interiorMask);
+  let glass = blurred;
 
   let rimSpecular = pow(max(dot(rimNormal, halfVector), 0.0), globals.specular.z);
   let mirroredRimSpecular = pow(max(dot(rimNormal, mirroredHalfVector), 0.0), globals.specular.z);
@@ -413,8 +412,6 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let specularTint = mix(vec3f(1.0), prismaticBorder, globals.specular.w);
   let borderLight = specularTint * (rimSpecular + mirroredRimSpecular) * globals.specular.x * rimBandMask;
 
-  let shadow = vec3f(0.0, 0.03, 0.08) * smoothstep(22.0, 0.0, distance - 1.0) * 0.16;
-
   if (globals.light.w > 0.5 && globals.light.w < 1.5) {
     return vec4f(displacementDebug, 1.0);
   }
@@ -423,18 +420,15 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     return vec4f(normalDebug, 1.0);
   }
 
-  var color = background - shadow;
+  var color = background;
   if (fillMask > 0.0) {
     color = mix(color, glass, fillMask);
     color = color + borderLight;
   }
 
-  let grain = (hash21(fragCoord) - 0.5) * 0.015;
-  color = color + grain;
   if (globals.pointer.w > 0.5) {
     color = mix(color, vec3f(1.0, 0.24, 0.18), sdfBoundaryMask);
   }
-  color = pow(max(color, vec3f(0.0)), vec3f(0.95));
 
   return vec4f(color, 1.0);
 }
