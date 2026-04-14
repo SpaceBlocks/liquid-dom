@@ -1,5 +1,6 @@
 import backgroundImageUrl from '../assets/background.jpg'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { loadStoredState, saveStoredState } from './controlStorage'
 
 const MAX_SHAPES = 3
 const GPU_BUFFER_USAGE = {
@@ -410,12 +411,19 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   );
   let normalDebug = vec3f(rimNormal * 0.5 + vec2f(0.5), 0.5);
 
-  let glass = blurred;
+  let glassTint = vec3f(globals.rim.z);
+  let sampledSpecularColor = blurred;
+  let glass = mix(blurred, glassTint, globals.rim.w);
+  let sampledSpecularLuma = dot(sampledSpecularColor, vec3f(0.2126, 0.7152, 0.0722));
+  let sampledSpecularBase = vec3f(sampledSpecularLuma);
+  let sampledSpecularTint = mix(sampledSpecularBase, sampledSpecularColor, globals.rim.x);
 
   let rimSpecular = pow(max(dot(rimNormal, lightDir), 0.0), globals.specular.z);
   let mirroredRimSpecular = pow(max(dot(rimNormal, mirroredLightDir), 0.0), globals.specular.z);
   let specularOpacity = clamp((rimSpecular + mirroredRimSpecular) * globals.specular.x, 0.0, 1.0);
+  let sampledSpecularOpacity = specularOpacity * globals.rim.y;
   let finalSpecularOpacity = specularOpacity * globals.specular.w;
+  let sampledBorderLight = sampledSpecularTint * sampledSpecularOpacity * rimBandMask;
   let borderLight = vec3f(1.0) * finalSpecularOpacity * rimBandMask;
 
   if (globals.light.w > 0.5 && globals.light.w < 1.5) {
@@ -429,6 +437,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   var color = background;
   if (fillMask > 0.0) {
     color = mix(color, glass, fillMask);
+    color = color + sampledBorderLight;
     color = color + borderLight;
   }
 
@@ -484,6 +493,10 @@ type RenderControls = {
   specularWidth: number
   specularSharpness: number
   specularOpacity: number
+  specularColorSaturation: number
+  specularColorOpacity: number
+  glassTintBrightness: number
+  glassTintOpacity: number
   showSdfBoundary: boolean
   showLight: boolean
   lightFollowsPointer: boolean
@@ -491,6 +504,7 @@ type RenderControls = {
   shapes: ShapeSettings[]
 }
 
+const CONTROL_STORAGE_KEY = 'liquid-glass-controls'
 const SHAPE_LABELS = ['Primary slab', 'Orbital blob', 'Lower bridge'] as const
 const DEBUG_VIEW_OPTIONS = [
   { value: 'final', label: 'Final' },
@@ -519,6 +533,10 @@ function createDefaultControls(): RenderControls {
     specularWidth: 0.7,
     specularSharpness: 4,
     specularOpacity: 0.4,
+    specularColorSaturation: 1,
+    specularColorOpacity: 0,
+    glassTintBrightness: 1,
+    glassTintOpacity: 0,
     showSdfBoundary: false,
     showLight: false,
     lightFollowsPointer: false,
@@ -547,6 +565,10 @@ function createDefaultControls(): RenderControls {
       },
     ],
   }
+}
+
+function loadStoredControls(): RenderControls {
+  return loadStoredState(CONTROL_STORAGE_KEY, createDefaultControls())
 }
 
 function resolveLightDirection(
@@ -640,13 +662,17 @@ export function GlassCanvas() {
   const frameRef = useRef<number | null>(null)
   const pointerRef = useRef({ x: 0.5, y: 0.5 })
   const [pointerState, setPointerState] = useState({ x: 0.5, y: 0.5 })
-  const [controls, setControls] = useState<RenderControls>(() => createDefaultControls())
-  const controlsRef = useRef<RenderControls>(createDefaultControls())
+  const [controls, setControls] = useState<RenderControls>(() => loadStoredControls())
+  const controlsRef = useRef<RenderControls>(controls)
   const [status, setStatus] = useState('Initializing WebGPU renderer...')
   const [copyStatus, setCopyStatus] = useState('')
 
   useEffect(() => {
     controlsRef.current = controls
+  }, [controls])
+
+  useEffect(() => {
+    saveStoredState(CONTROL_STORAGE_KEY, controls)
   }, [controls])
 
   useEffect(() => {
@@ -922,10 +948,10 @@ export function GlassCanvas() {
         globals[18] = currentControls.specularSharpness
         globals[19] = currentControls.specularOpacity
 
-        globals[20] = 0
-        globals[21] = 0
-        globals[22] = 0
-        globals[23] = 0
+        globals[20] = currentControls.specularColorSaturation
+        globals[21] = currentControls.specularColorOpacity
+        globals[22] = currentControls.glassTintBrightness
+        globals[23] = currentControls.glassTintOpacity
 
         globals[24] = currentControls.bezelWidth * currentDpr
         globals[25] = currentControls.glassThickness
@@ -1432,6 +1458,46 @@ export function GlassCanvas() {
             step: 0.01,
             precision: 2,
             onChange: (value) => updateControl('specularOpacity', value),
+          })}
+          {renderSlider({
+            label: 'Color saturation',
+            value: controls.specularColorSaturation,
+            min: 0,
+            max: 2,
+            step: 0.01,
+            precision: 2,
+            onChange: (value) => updateControl('specularColorSaturation', value),
+          })}
+          {renderSlider({
+            label: 'Color opacity',
+            value: controls.specularColorOpacity,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            precision: 2,
+            onChange: (value) => updateControl('specularColorOpacity', value),
+          })}
+        </section>
+
+        <section className="glass-stage__group">
+          <h3>Glass</h3>
+          {renderSlider({
+            label: 'Tint brightness',
+            value: controls.glassTintBrightness,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            precision: 2,
+            onChange: (value) => updateControl('glassTintBrightness', value),
+          })}
+          {renderSlider({
+            label: 'Tint opacity',
+            value: controls.glassTintOpacity,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            precision: 2,
+            onChange: (value) => updateControl('glassTintOpacity', value),
           })}
         </section>
 
