@@ -606,17 +606,9 @@ export function EditorDemo() {
 
   return (
     <div className="editor-layout">
-      <section className="editor-preview">
-        <div ref={canvasHostRef} className="editor-preview__viewport" />
-      </section>
-
-      <aside className="editor-sidebar">
+      <aside className="editor-sidebar editor-sidebar--left">
         <section className="editor-panel">
           <div className="editor-panel__header">
-            <div>
-              <p className="editor-panel__eyebrow">Hierarchy</p>
-              <h2>Scene graph</h2>
-            </div>
             <div className="editor-panel__toolbar">
               <button type="button" onClick={() => addRootChild('group')}>
                 + Group
@@ -647,13 +639,15 @@ export function EditorDemo() {
             ))}
           </div>
         </section>
+      </aside>
 
+      <section className="editor-preview">
+        <div ref={canvasHostRef} className="editor-preview__viewport" />
+      </section>
+
+      <aside className="editor-sidebar editor-sidebar--right">
         <section className="editor-panel editor-panel--inspector">
           <div className="editor-panel__header">
-            <div>
-              <p className="editor-panel__eyebrow">Inspector</p>
-              <h2>{selectedNode ? selectedNode.name : 'Scene'}</h2>
-            </div>
             {selectedId !== SCENE_ID ? (
               <button type="button" className="editor-panel__danger" onClick={removeSelectedNode}>
                 Remove
