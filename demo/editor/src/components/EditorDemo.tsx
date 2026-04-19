@@ -9,7 +9,12 @@ import {
   type Point,
   type SurfaceProfile,
 } from 'liquid-glass-dom'
-import { EditorBackdrop } from './EditorBackdrop'
+import {
+  EditorBackdrop,
+  type AdaptiveTintSettings,
+  type BackdropMode,
+  type SteppedGradientSettings,
+} from './EditorBackdrop'
 
 type TintColor = {
   r: number
@@ -103,6 +108,46 @@ type SceneState = {
 type NodeLocation = {
   node: EditorNode | null
   parentId: string | null
+}
+
+type RuntimeContainerEntry = {
+  id: string
+  tint: TintColor
+  node: Container
+}
+
+type RuntimeBuildResult = {
+  node: Group | Container
+  containers: RuntimeContainerEntry[]
+}
+
+type AdaptiveTintState = {
+  alpha: number
+  currentBrightness: number
+  targetBrightness: number
+  pendingBrightness: number | null
+  observedBrightness: number | null
+  settleAt: number
+}
+
+type BackdropSettings = {
+  mode: BackdropMode
+  steppedGradient: SteppedGradientSettings
+  adaptiveTint: AdaptiveTintSettings
+}
+
+const BACKDROP_SETTINGS_STORAGE_KEY = 'liquid-glass-demo.backdrop-settings'
+const DEFAULT_BACKDROP_SETTINGS: BackdropSettings = {
+  mode: 'editor',
+  steppedGradient: {
+    steps: 8,
+    stepHeight: 120,
+    contentWidth: 500,
+  },
+  adaptiveTint: {
+    easingDurationMs: 500,
+    easingDelayMs: 300,
+  },
 }
 
 const SURFACE_PROFILES: Array<{ value: SurfaceProfile; label: string }> = [
@@ -389,7 +434,7 @@ function insertNode(
   })
 }
 
-function buildRuntimeNode(node: RootNode): Group | Container {
+function buildRuntimeNode(node: RootNode): RuntimeBuildResult {
   if (node.type === 'group') {
     const group = new Group({
       x: node.x,
@@ -400,11 +445,18 @@ function buildRuntimeNode(node: RootNode): Group | Container {
       origin: node.origin,
     })
 
+    const containers: RuntimeContainerEntry[] = []
+
     for (const child of node.children) {
-      group.add(buildRuntimeNode(child))
+      const result = buildRuntimeNode(child)
+      group.add(result.node)
+      containers.push(...result.containers)
     }
 
-    return group
+    return {
+      node: group,
+      containers,
+    }
   }
 
   const container = new Container({
@@ -451,7 +503,16 @@ function buildRuntimeNode(node: RootNode): Group | Container {
     )
   }
 
-  return container
+  return {
+    node: container,
+    containers: [
+      {
+        id: node.id,
+        tint: node.tint,
+        node: container,
+      },
+    ],
+  }
 }
 
 function nodeTypeLabel(type: EditorNode['type'] | 'scene') {
@@ -471,15 +532,70 @@ function toDisplayNumber(value: number, precision = 2) {
   return Number(value.toFixed(precision))
 }
 
+function smoothstep(edge0: number, edge1: number, value: number) {
+  const t = clamp((value - edge0) / Math.max(edge1 - edge0, Number.EPSILON), 0, 1)
+  return t * t * (3 - 2 * t)
+}
+
+function tintBrightness(tint: TintColor) {
+  return tint.r * 0.2126 + tint.g * 0.7152 + tint.b * 0.0722
+}
+
+function targetTintBrightness(luminance: number) {
+  const normalized = smoothstep(0.08, 0.92, luminance)
+  const mappedBrightness = 0.1 + normalized * 0.75
+  return luminance >= 0.5 ? Math.max(mappedBrightness, luminance) : mappedBrightness
+}
+
+function shouldUpdateAdaptiveBrightness(current: number | null, next: number, epsilon = 0.01) {
+  return current === null || Math.abs(current - next) > epsilon
+}
+
+function loadBackdropSettings(): BackdropSettings {
+  const stored = localStorage.getItem(BACKDROP_SETTINGS_STORAGE_KEY)
+  if (!stored) {
+    return DEFAULT_BACKDROP_SETTINGS
+  }
+
+  const parsed = JSON.parse(stored) as Partial<BackdropSettings> & {
+    adaptiveTint?: Partial<AdaptiveTintSettings> & { easingSpeed?: number }
+  }
+  const storedAdaptiveTint: Partial<AdaptiveTintSettings> & { easingSpeed?: number } =
+    parsed.adaptiveTint ?? {}
+
+  return {
+    ...DEFAULT_BACKDROP_SETTINGS,
+    ...parsed,
+    steppedGradient: {
+      ...DEFAULT_BACKDROP_SETTINGS.steppedGradient,
+      ...(parsed.steppedGradient ?? {}),
+    },
+    adaptiveTint: {
+      ...DEFAULT_BACKDROP_SETTINGS.adaptiveTint,
+      ...storedAdaptiveTint,
+      easingDurationMs:
+        storedAdaptiveTint.easingDurationMs ??
+        (storedAdaptiveTint.easingSpeed ? Math.round(1000 / storedAdaptiveTint.easingSpeed) : DEFAULT_BACKDROP_SETTINGS.adaptiveTint.easingDurationMs),
+    },
+  }
+}
+
 export function EditorDemo() {
   const canvasHostRef = useRef<HTMLDivElement | null>(null)
   const rendererRef = useRef<Renderer | null>(null)
   const sceneRef = useRef<Scene | null>(null)
   const htmlRootRef = useRef<Root | null>(null)
   const frameRef = useRef<number | null>(null)
+  const lastFrameTimeRef = useRef<number | null>(null)
   const topLevelRuntimeNodesRef = useRef<Array<Group | Container>>([])
+  const runtimeContainersRef = useRef<Map<string, Container>>(new Map())
+  const adaptiveTintStatesRef = useRef<Map<string, AdaptiveTintState>>(new Map())
+  const backdropSettingsRef = useRef<BackdropSettings>(DEFAULT_BACKDROP_SETTINGS)
   const [sceneState, setSceneState] = useState<SceneState>(() => createDefaultSceneState())
+  const [backdropSettings, setBackdropSettings] = useState<BackdropSettings>(() => loadBackdropSettings())
   const [selectedId, setSelectedId] = useState<string>(SCENE_ID)
+
+  backdropSettingsRef.current = backdropSettings
 
   useEffect(() => {
     const host = canvasHostRef.current
@@ -490,7 +606,6 @@ export function EditorDemo() {
     const scene = new Scene()
     const renderer = new Renderer({ scene })
     const htmlRoot = createRoot(renderer.htmlRoot)
-    htmlRoot.render(<EditorBackdrop />)
 
     const canvas = renderer.canvas
     canvas.className = 'editor-preview__canvas'
@@ -500,7 +615,46 @@ export function EditorDemo() {
     rendererRef.current = renderer
     htmlRootRef.current = htmlRoot
 
-    function renderLoop() {
+    function renderLoop(now: number) {
+      const lastFrameTime = lastFrameTimeRef.current
+      const deltaSeconds = lastFrameTime === null ? 1 / 60 : Math.max((now - lastFrameTime) / 1000, 0)
+      const deltaMs = deltaSeconds * 1000
+      lastFrameTimeRef.current = now
+
+      for (const [id, container] of runtimeContainersRef.current) {
+        const adaptiveTintState = adaptiveTintStatesRef.current.get(id)
+        if (!adaptiveTintState) {
+          continue
+        }
+
+        const metrics = renderer.getBackdropMetrics(container)
+        if (metrics) {
+          const nextObservedBrightness = targetTintBrightness(metrics.luminanceP50)
+          if (shouldUpdateAdaptiveBrightness(adaptiveTintState.observedBrightness, nextObservedBrightness)) {
+            adaptiveTintState.pendingBrightness = nextObservedBrightness
+            adaptiveTintState.observedBrightness = nextObservedBrightness
+            adaptiveTintState.settleAt = now + backdropSettingsRef.current.adaptiveTint.easingDelayMs
+          }
+        }
+
+        if (adaptiveTintState.pendingBrightness !== null && now >= adaptiveTintState.settleAt) {
+          adaptiveTintState.targetBrightness = adaptiveTintState.pendingBrightness
+          adaptiveTintState.pendingBrightness = null
+        }
+
+        const blend =
+          1 - Math.exp(-deltaMs / backdropSettingsRef.current.adaptiveTint.easingDurationMs)
+        adaptiveTintState.currentBrightness +=
+          (adaptiveTintState.targetBrightness - adaptiveTintState.currentBrightness) * blend
+
+        container.tint = {
+          r: adaptiveTintState.currentBrightness,
+          g: adaptiveTintState.currentBrightness,
+          b: adaptiveTintState.currentBrightness,
+          a: adaptiveTintState.alpha,
+        }
+      }
+
       renderer.render()
       frameRef.current = requestAnimationFrame(renderLoop)
     }
@@ -512,11 +666,17 @@ export function EditorDemo() {
         cancelAnimationFrame(frameRef.current)
         frameRef.current = null
       }
+      lastFrameTimeRef.current = null
 
       for (const node of topLevelRuntimeNodesRef.current) {
         node.remove()
       }
       topLevelRuntimeNodesRef.current = []
+      for (const container of runtimeContainersRef.current.values()) {
+        renderer.setBackdropMetricsTracking(container, false)
+      }
+      runtimeContainersRef.current.clear()
+      adaptiveTintStatesRef.current.clear()
 
       queueMicrotask(() => {
         htmlRoot.unmount()
@@ -531,22 +691,89 @@ export function EditorDemo() {
   }, [])
 
   useEffect(() => {
+    htmlRootRef.current?.render(
+      <EditorBackdrop
+        mode={backdropSettings.mode}
+        steppedGradientSettings={backdropSettings.steppedGradient}
+        adaptiveTintSettings={backdropSettings.adaptiveTint}
+        onModeChange={(mode) =>
+          setBackdropSettings((current) => ({
+            ...current,
+            mode,
+          }))
+        }
+        onSteppedGradientSettingsChange={(steppedGradient) =>
+          setBackdropSettings((current) => ({
+            ...current,
+            steppedGradient,
+          }))
+        }
+        onAdaptiveTintSettingsChange={(adaptiveTint) =>
+          setBackdropSettings((current) => ({
+            ...current,
+            adaptiveTint,
+          }))
+        }
+      />,
+    )
+  }, [backdropSettings])
+
+  useEffect(() => {
+    localStorage.setItem(BACKDROP_SETTINGS_STORAGE_KEY, JSON.stringify(backdropSettings))
+  }, [backdropSettings])
+
+  useEffect(() => {
     const scene = sceneRef.current
+    const renderer = rendererRef.current
     if (!scene) {
       return
+    }
+
+    for (const container of runtimeContainersRef.current.values()) {
+      renderer?.setBackdropMetricsTracking(container, false)
     }
 
     for (const node of topLevelRuntimeNodesRef.current) {
       node.remove()
     }
 
+    const previousAdaptiveTintStates = adaptiveTintStatesRef.current
+    const nextAdaptiveTintStates = new Map<string, AdaptiveTintState>()
+    const nextRuntimeContainers = new Map<string, Container>()
     const nextTopLevel = sceneState.children.map((child) => {
-      const runtimeNode = buildRuntimeNode(child)
-      scene.add(runtimeNode)
-      return runtimeNode
+      const result = buildRuntimeNode(child)
+      scene.add(result.node)
+
+      for (const entry of result.containers) {
+        const previousAdaptiveTintState = previousAdaptiveTintStates.get(entry.id)
+        const nextAdaptiveTintState =
+          previousAdaptiveTintState ?? {
+            alpha: entry.tint.a,
+            currentBrightness: tintBrightness(entry.tint),
+            targetBrightness: tintBrightness(entry.tint),
+            pendingBrightness: null,
+            observedBrightness: null,
+            settleAt: 0,
+          }
+
+        nextAdaptiveTintState.alpha = entry.tint.a
+        nextAdaptiveTintStates.set(entry.id, nextAdaptiveTintState)
+        nextRuntimeContainers.set(entry.id, entry.node)
+        entry.node.tint = {
+          r: nextAdaptiveTintState.currentBrightness,
+          g: nextAdaptiveTintState.currentBrightness,
+          b: nextAdaptiveTintState.currentBrightness,
+          a: nextAdaptiveTintState.alpha,
+        }
+        renderer?.setBackdropMetricsTracking(entry.node, true)
+      }
+
+      return result.node
     })
 
     topLevelRuntimeNodesRef.current = nextTopLevel
+    runtimeContainersRef.current = nextRuntimeContainers
+    adaptiveTintStatesRef.current = nextAdaptiveTintStates
   }, [sceneState])
 
   const selectedLocation =

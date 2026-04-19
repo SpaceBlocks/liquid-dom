@@ -1,11 +1,43 @@
+import { useEffect, useId, useState } from 'react'
+
 import heroImage from '../assets/hero.png'
 import backgroundImage from '../assets/background.jpg'
 import backgroundTwoImage from '../assets/background2.jpg'
 import backgroundThreeImage from '../assets/background3.jpg'
 
-export function EditorBackdrop() {
+export type BackdropMode = 'editor' | 'steppedGradient'
+
+export type SteppedGradientSettings = {
+  steps: number
+  stepHeight: number
+  contentWidth: number
+}
+
+export type AdaptiveTintSettings = {
+  easingDurationMs: number
+  easingDelayMs: number
+}
+
+type EditorBackdropProps = {
+  mode: BackdropMode
+  steppedGradientSettings: SteppedGradientSettings
+  adaptiveTintSettings: AdaptiveTintSettings
+  onModeChange: (mode: BackdropMode) => void
+  onSteppedGradientSettingsChange: (settings: SteppedGradientSettings) => void
+  onAdaptiveTintSettingsChange: (settings: AdaptiveTintSettings) => void
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function toDraftValue(value: number) {
+  return String(value)
+}
+
+function EditorDocumentBackdrop() {
   return (
-    <div className="editor-backdrop">
+    <div className="editor-backdrop__document">
       <section className="editor-backdrop__hero">
         <div>
           <p className="editor-backdrop__eyebrow">liquid-glass-dom</p>
@@ -40,7 +72,7 @@ export function EditorBackdrop() {
         </article>
         <article className="editor-backdrop__card editor-backdrop__card--mint">
           <span>Profiles</span>
-          <strong>Convex squircle, concave, and lip surface response.</strong>
+          <strong>Convex, concave, and lip surface response.</strong>
         </article>
         <article className="editor-backdrop__card editor-backdrop__card--violet">
           <span>Specular</span>
@@ -126,6 +158,299 @@ export function EditorBackdrop() {
           while this content scrolls, the DOM-in-canvas path is doing real work.
         </p>
       </section>
+    </div>
+  )
+}
+
+function SteppedGradientBackdrop({ settings }: { settings: SteppedGradientSettings }) {
+  const steps = Array.from({ length: settings.steps }, (_, index) => {
+    const brightness = settings.steps <= 1 ? 1 : index / (settings.steps - 1)
+    return {
+      id: index,
+      brightness,
+    }
+  })
+
+  return (
+    <div className="editor-backdrop__gradient">
+      <div className="editor-backdrop__steps" aria-label="Discrete brightness gradient">
+        {steps.map((step) => {
+          const tone = Math.round(step.brightness * 255)
+          const textColor = step.brightness >= 0.5 ? '#000000' : '#ffffff'
+          return (
+            <section
+              key={step.id}
+              className="editor-backdrop__step"
+              style={{
+                minHeight: `${settings.stepHeight}px`,
+                backgroundColor: `rgb(${tone}, ${tone}, ${tone})`,
+                color: textColor,
+              }}
+            >
+              <div
+                className="editor-backdrop__step-inner"
+                style={{
+                  width: `min(100%, ${settings.contentWidth}px)`,
+                }}
+              >
+                <div className="editor-backdrop__step-copy">
+                  <p className="editor-backdrop__step-title">Gradient Step</p>
+                  <p className="editor-backdrop__step-label">
+                    This is a longer line of sample text for evaluating contrast, refraction, and
+                    adaptive tint against discrete backdrop brightness bands.
+                  </p>
+                </div>
+                <div
+                  className="editor-backdrop__step-blob"
+                  aria-hidden="true"
+                  style={{
+                    width: `${settings.stepHeight}px`,
+                    height: `${settings.stepHeight}px`,
+                  }}
+                />
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function EditorBackdrop({
+  mode,
+  steppedGradientSettings,
+  adaptiveTintSettings,
+  onModeChange,
+  onSteppedGradientSettingsChange,
+  onAdaptiveTintSettingsChange,
+}: EditorBackdropProps) {
+  const stepsId = useId()
+  const stepHeightId = useId()
+  const contentWidthId = useId()
+  const easingDurationId = useId()
+  const easingDelayId = useId()
+  const [stepsDraft, setStepsDraft] = useState(() => toDraftValue(steppedGradientSettings.steps))
+  const [stepHeightDraft, setStepHeightDraft] = useState(() =>
+    toDraftValue(steppedGradientSettings.stepHeight),
+  )
+  const [contentWidthDraft, setContentWidthDraft] = useState(() =>
+    toDraftValue(steppedGradientSettings.contentWidth),
+  )
+  const [easingDurationDraft, setEasingDurationDraft] = useState(() =>
+    toDraftValue(adaptiveTintSettings.easingDurationMs),
+  )
+  const [easingDelayDraft, setEasingDelayDraft] = useState(() =>
+    toDraftValue(adaptiveTintSettings.easingDelayMs),
+  )
+
+  useEffect(() => {
+    setStepsDraft(toDraftValue(steppedGradientSettings.steps))
+  }, [steppedGradientSettings.steps])
+
+  useEffect(() => {
+    setStepHeightDraft(toDraftValue(steppedGradientSettings.stepHeight))
+  }, [steppedGradientSettings.stepHeight])
+
+  useEffect(() => {
+    setContentWidthDraft(toDraftValue(steppedGradientSettings.contentWidth))
+  }, [steppedGradientSettings.contentWidth])
+
+  useEffect(() => {
+    setEasingDurationDraft(toDraftValue(adaptiveTintSettings.easingDurationMs))
+  }, [adaptiveTintSettings.easingDurationMs])
+
+  useEffect(() => {
+    setEasingDelayDraft(toDraftValue(adaptiveTintSettings.easingDelayMs))
+  }, [adaptiveTintSettings.easingDelayMs])
+
+  function updateSteps(nextValue: number) {
+    onSteppedGradientSettingsChange({
+      ...steppedGradientSettings,
+      steps: clamp(Math.round(nextValue), 2, 64),
+    })
+  }
+
+  function updateStepHeight(nextValue: number) {
+    onSteppedGradientSettingsChange({
+      ...steppedGradientSettings,
+      stepHeight: clamp(Math.round(nextValue), 32, 480),
+    })
+  }
+
+  function updateContentWidth(nextValue: number) {
+    onSteppedGradientSettingsChange({
+      ...steppedGradientSettings,
+      contentWidth: clamp(Math.round(nextValue), 200, 1600),
+    })
+  }
+
+  function updateEasingDurationMs(nextValue: number) {
+    onAdaptiveTintSettingsChange({
+      ...adaptiveTintSettings,
+      easingDurationMs: clamp(Math.round(nextValue), 1, 5000),
+    })
+  }
+
+  function updateEasingDelayMs(nextValue: number) {
+    onAdaptiveTintSettingsChange({
+      ...adaptiveTintSettings,
+      easingDelayMs: clamp(Math.round(nextValue), 0, 5000),
+    })
+  }
+
+  function commitStepsDraft() {
+    const nextValue = Number(stepsDraft)
+    if (!Number.isFinite(nextValue)) {
+      setStepsDraft(toDraftValue(steppedGradientSettings.steps))
+      return
+    }
+    updateSteps(nextValue)
+  }
+
+  function commitStepHeightDraft() {
+    const nextValue = Number(stepHeightDraft)
+    if (!Number.isFinite(nextValue)) {
+      setStepHeightDraft(toDraftValue(steppedGradientSettings.stepHeight))
+      return
+    }
+    updateStepHeight(nextValue)
+  }
+
+  function commitContentWidthDraft() {
+    const nextValue = Number(contentWidthDraft)
+    if (!Number.isFinite(nextValue)) {
+      setContentWidthDraft(toDraftValue(steppedGradientSettings.contentWidth))
+      return
+    }
+    updateContentWidth(nextValue)
+  }
+
+  function commitEasingDurationDraft() {
+    const nextValue = Number(easingDurationDraft)
+    if (!Number.isFinite(nextValue)) {
+      setEasingDurationDraft(toDraftValue(adaptiveTintSettings.easingDurationMs))
+      return
+    }
+    updateEasingDurationMs(nextValue)
+  }
+
+  function commitEasingDelayDraft() {
+    const nextValue = Number(easingDelayDraft)
+    if (!Number.isFinite(nextValue)) {
+      setEasingDelayDraft(toDraftValue(adaptiveTintSettings.easingDelayMs))
+      return
+    }
+    updateEasingDelayMs(nextValue)
+  }
+
+  return (
+    <div className="editor-backdrop">
+      <div className="editor-backdrop__toolbar">
+        <div className="editor-backdrop__switcher" role="tablist" aria-label="Backdrop switcher">
+          <button
+            type="button"
+            className={
+              mode === 'editor'
+                ? 'editor-backdrop__switcher-button editor-backdrop__switcher-button--active'
+                : 'editor-backdrop__switcher-button'
+            }
+            onClick={() => onModeChange('editor')}
+          >
+            Editor
+          </button>
+          <button
+            type="button"
+            className={
+              mode === 'steppedGradient'
+                ? 'editor-backdrop__switcher-button editor-backdrop__switcher-button--active'
+                : 'editor-backdrop__switcher-button'
+            }
+            onClick={() => onModeChange('steppedGradient')}
+          >
+            Steps
+          </button>
+        </div>
+
+        <details className="editor-backdrop__settings">
+          <summary>Backdrop settings</summary>
+          <div className="editor-backdrop__settings-panel">
+            <label className="editor-backdrop__settings-field" htmlFor={stepsId}>
+              <span>Number of steps</span>
+              <input
+                id={stepsId}
+                type="number"
+                min={2}
+                max={64}
+                step={1}
+                value={stepsDraft}
+                onChange={(event) => setStepsDraft(event.currentTarget.value)}
+                onBlur={commitStepsDraft}
+              />
+            </label>
+            <label className="editor-backdrop__settings-field" htmlFor={stepHeightId}>
+              <span>Step height</span>
+              <input
+                id={stepHeightId}
+                type="number"
+                min={32}
+                max={480}
+                step={1}
+                value={stepHeightDraft}
+                onChange={(event) => setStepHeightDraft(event.currentTarget.value)}
+                onBlur={commitStepHeightDraft}
+              />
+            </label>
+            <label className="editor-backdrop__settings-field" htmlFor={contentWidthId}>
+              <span>Content width</span>
+              <input
+                id={contentWidthId}
+                type="number"
+                min={200}
+                max={1600}
+                step={1}
+                value={contentWidthDraft}
+                onChange={(event) => setContentWidthDraft(event.currentTarget.value)}
+                onBlur={commitContentWidthDraft}
+              />
+            </label>
+            <label className="editor-backdrop__settings-field" htmlFor={easingDurationId}>
+              <span>Tint easing</span>
+              <input
+                id={easingDurationId}
+                type="number"
+                min={1}
+                max={5000}
+                step={1}
+                value={easingDurationDraft}
+                onChange={(event) => setEasingDurationDraft(event.currentTarget.value)}
+                onBlur={commitEasingDurationDraft}
+              />
+            </label>
+            <label className="editor-backdrop__settings-field" htmlFor={easingDelayId}>
+              <span>Tint delay</span>
+              <input
+                id={easingDelayId}
+                type="number"
+                min={0}
+                max={5000}
+                step={25}
+                value={easingDelayDraft}
+                onChange={(event) => setEasingDelayDraft(event.currentTarget.value)}
+                onBlur={commitEasingDelayDraft}
+              />
+            </label>
+          </div>
+        </details>
+      </div>
+
+      <div className="editor-backdrop__content">
+        {mode === 'editor' ? (
+          <EditorDocumentBackdrop />
+        ) : (
+          <SteppedGradientBackdrop settings={steppedGradientSettings} />
+        )}
+      </div>
     </div>
   )
 }

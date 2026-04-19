@@ -21,6 +21,36 @@ export type RgbaColor = {
 }
 
 /**
+ * Cached backdrop statistics measured for a tracked container in a specific renderer.
+ */
+export type BackdropMetrics = {
+  /**
+   * Mean backdrop color in linear RGB over the sampled interior region.
+   */
+  averageLinearColor: {
+    r: number
+    g: number
+    b: number
+  }
+  /**
+   * Mean linear luminance over the sampled interior region.
+   */
+  averageLuminance: number
+  /**
+   * 10th percentile of the sampled linear luminance distribution.
+   */
+  luminanceP10: number
+  /**
+   * 50th percentile of the sampled linear luminance distribution.
+   */
+  luminanceP50: number
+  /**
+   * 90th percentile of the sampled linear luminance distribution.
+   */
+  luminanceP90: number
+}
+
+/**
  * A local transform in the same coordinate space as normal HTML layout.
  */
 export interface Transform {

@@ -249,16 +249,163 @@
   position: relative;
   height: 100%;
   overflow: auto;
-  padding: 42px;
   color: #f6f1e6;
-  background:
-    radial-gradient(circle at top left, rgba(255, 171, 115, 0.34), transparent 34%),
-    radial-gradient(circle at 80% 22%, rgba(83, 187, 255, 0.28), transparent 28%),
-    linear-gradient(135deg, #111419 0%, #161821 50%, #0d1016 100%);
+  background: linear-gradient(135deg, #111419 0%, #161821 50%, #0d1016 100%);
 }
 
-.editor-backdrop > * + * {
+.editor-backdrop__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 18px 0;
+}
+
+.editor-backdrop__switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(12, 15, 21, 0.7);
+  backdrop-filter: blur(16px);
+}
+
+.editor-backdrop__switcher-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 14px;
+  color: rgba(243, 246, 255, 0.82);
+  background: transparent;
+  cursor: pointer;
+}
+
+.editor-backdrop__switcher-button--active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.editor-backdrop__settings {
+  width: min(280px, 100%);
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(12, 15, 21, 0.7);
+  backdrop-filter: blur(16px);
+}
+
+.editor-backdrop__settings summary {
+  cursor: pointer;
+  color: rgba(245, 247, 255, 0.92);
+  font-size: 0.88rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.editor-backdrop__settings-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.editor-backdrop__settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+.editor-backdrop__settings-field span {
+  color: rgba(218, 225, 244, 0.76);
+  font-size: 0.78rem;
+}
+
+.editor-backdrop__settings-field input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: #f4f7ff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.editor-backdrop__content {
+  padding: 20px 42px 42px;
+}
+
+.editor-backdrop__document > * + *,
+.editor-backdrop__gradient > * + * {
   margin-top: 30px;
+}
+
+.editor-backdrop__gradient {
+  margin: -20px -42px -42px;
+  min-height: 100%;
+}
+
+.editor-backdrop__steps {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-top: 100vh;
+  padding-bottom: 100vh;
+  box-sizing: border-box;
+}
+
+.editor-backdrop__step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.editor-backdrop__step-inner {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 24px;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+.editor-backdrop__step-copy {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 18px 0;
+  text-align: center;
+}
+
+.editor-backdrop__step-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.editor-backdrop__step-label {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.editor-backdrop__step-blob {
+  flex: 0 0 auto;
+  align-self: center;
+  background:
+    radial-gradient(circle at 24% 26%, rgba(255, 78, 126, 0.95) 0 18%, transparent 18.5%),
+    radial-gradient(circle at 72% 24%, rgba(255, 180, 65, 0.92) 0 17%, transparent 17.5%),
+    radial-gradient(circle at 36% 72%, rgba(72, 255, 184, 0.9) 0 20%, transparent 20.5%),
+    radial-gradient(circle at 78% 74%, rgba(72, 146, 255, 0.92) 0 16%, transparent 16.5%),
+    radial-gradient(circle at 54% 52%, rgba(173, 91, 255, 0.88) 0 21%, transparent 21.5%);
 }
 
 .editor-backdrop__hero {

@@ -1,3 +1,5 @@
+// Used by the two-pass separable blur pipeline to build the blurred backdrop
+// that glass refraction, reflection, and metrics sampling read from.
 export const BLUR_SHADER = /* wgsl */ `
 struct BlurParams {
   direction: vec2f,
@@ -55,7 +57,9 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
 }
 `
 
-export const GLASS_SHADER = /* wgsl */ `
+// Shared SDF, profile, and fullscreen-triangle helpers used by the glass and
+// metrics passes so both evaluate the same fused shape field.
+const SHADER_SHARED = /* wgsl */ `
 struct Globals {
   canvas: vec4f,
   surface: vec4f,
@@ -73,12 +77,6 @@ struct ShapeData {
   bounds: vec4f,
   shapeInfo: vec4f,
 };
-
-@group(0) @binding(0) var<uniform> globals: Globals;
-@group(0) @binding(1) var<storage, read> shapes: array<ShapeData>;
-@group(0) @binding(2) var backgroundSampler: sampler;
-@group(0) @binding(3) var backgroundTextureSharp: texture_2d<f32>;
-@group(0) @binding(4) var backgroundTextureBlurred: texture_2d<f32>;
 
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -113,8 +111,7 @@ fn sdRoundRect(localPos: vec2f, halfSize: vec2f, radius: f32, cornerTransitionSp
   return cornerDistance + min(max(q.x, q.y), 0.0) - clampedRadius;
 }
 
-fn sceneSdf(pos: vec2f) -> f32 {
-  let shapeCount = u32(globals.specularSecondary.w);
+fn sceneSdf(pos: vec2f, shapeCount: u32, smoothing: f32) -> f32 {
   var distance = 1e5;
   var found = false;
 
@@ -135,32 +132,24 @@ fn sceneSdf(pos: vec2f) -> f32 {
       distance = shapeDistance;
       found = true;
     } else {
-      distance = smin(distance, shapeDistance, globals.surface.x);
+      distance = smin(distance, shapeDistance, smoothing);
     }
   }
 
   return distance;
 }
 
-fn sdfGradient(pos: vec2f) -> vec2f {
+fn sdfGradient(pos: vec2f, shapeCount: u32, smoothing: f32) -> vec2f {
   let eps = 1.0;
   let gradient = vec2f(
-    sceneSdf(pos + vec2f(eps, 0.0)) - sceneSdf(pos - vec2f(eps, 0.0)),
-    sceneSdf(pos + vec2f(0.0, eps)) - sceneSdf(pos - vec2f(0.0, eps)),
+    sceneSdf(pos + vec2f(eps, 0.0), shapeCount, smoothing) - sceneSdf(pos - vec2f(eps, 0.0), shapeCount, smoothing),
+    sceneSdf(pos + vec2f(0.0, eps), shapeCount, smoothing) - sceneSdf(pos - vec2f(0.0, eps), shapeCount, smoothing),
   );
   let magnitude = length(gradient);
   if (magnitude < 0.0001) {
     return vec2f(0.0, -1.0);
   }
   return gradient / magnitude;
-}
-
-fn sampleBackgroundSharp(uv: vec2f) -> vec3f {
-  return textureSampleLevel(backgroundTextureSharp, backgroundSampler, uv, 0.0).rgb;
-}
-
-fn sampleBackgroundBlurred(uv: vec2f) -> vec3f {
-  return textureSampleLevel(backgroundTextureBlurred, backgroundSampler, uv, 0.0).rgb;
 }
 
 fn smootherstep(value: f32) -> f32 {
@@ -218,15 +207,36 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   output.uv = vec2f(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);
   return output;
 }
+`
+
+// Used by the main glass render pass. This shades the fused glass containers,
+// sampling the sharp and blurred backdrop textures for refraction, reflection, and highlights.
+export const GLASS_SHADER = /* wgsl */ `
+${SHADER_SHARED}
+
+@group(0) @binding(0) var<uniform> globals: Globals;
+@group(0) @binding(1) var<storage, read> shapes: array<ShapeData>;
+@group(0) @binding(2) var backgroundSampler: sampler;
+@group(0) @binding(3) var backgroundTextureSharp: texture_2d<f32>;
+@group(0) @binding(4) var backgroundTextureBlurred: texture_2d<f32>;
+
+fn sampleBackgroundSharp(uv: vec2f) -> vec3f {
+  return textureSampleLevel(backgroundTextureSharp, backgroundSampler, uv, 0.0).rgb;
+}
+
+fn sampleBackgroundBlurred(uv: vec2f) -> vec3f {
+  return textureSampleLevel(backgroundTextureBlurred, backgroundSampler, uv, 0.0).rgb;
+}
 
 @fragment
 fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+  let shapeCount = u32(globals.specularSecondary.w);
   let fragCoord = in.uv * globals.canvas.xy;
   let background = sampleBackgroundSharp(in.uv);
 
-  let distance = sceneSdf(fragCoord);
+  let distance = sceneSdf(fragCoord, shapeCount, globals.surface.x);
   let fillMask = 1.0 - smoothstep(0.0, 1.4, distance);
-  let gradient = sdfGradient(fragCoord);
+  let gradient = sdfGradient(fragCoord, shapeCount, globals.surface.x);
   let pixelWidth = max(fwidth(distance), 0.75);
   let rimWidth = max(globals.specularPrimary.y, 0.0001);
   let rimBandMask =
@@ -327,6 +337,41 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
 }
 `
 
+// Used by the offscreen metrics pass. This samples the blurred backdrop over the
+// interior of a container so the renderer can expose backdrop luminance/color statistics.
+export const METRICS_SHADER = /* wgsl */ `
+${SHADER_SHARED}
+
+struct MetricsBounds {
+  min: vec2f,
+  max: vec2f,
+};
+
+@group(0) @binding(0) var<uniform> globals: Globals;
+@group(0) @binding(1) var<storage, read> shapes: array<ShapeData>;
+@group(0) @binding(2) var metricsSampler: sampler;
+@group(0) @binding(3) var blurredBackdrop: texture_2d<f32>;
+@group(0) @binding(4) var<uniform> metricsBounds: MetricsBounds;
+
+@fragment
+fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+  let shapeCount = u32(globals.specularSecondary.w);
+  let positionPx = mix(metricsBounds.min, metricsBounds.max, in.uv);
+  let insideCanvas =
+    all(positionPx >= vec2f(0.0)) &&
+    all(positionPx <= globals.canvas.xy);
+  let distance = sceneSdf(positionPx, shapeCount, globals.surface.x);
+  // This uses bezel width as the interior cutoff. For heavily fused shapes with
+  // spacing wider than the bezel, the transition band can extend past this threshold,
+  // but we accept that simplification for now because it does not occur in our target use cases.
+  let isInterior = insideCanvas && distance <= -globals.surface.w;
+  let color = textureSampleLevel(blurredBackdrop, metricsSampler, positionPx / globals.canvas.xy, 0.0).rgb;
+  return vec4f(color, select(0.0, 1.0, isInterior));
+}
+`
+
+// Used by the final present pass to copy the latest composited scene texture to
+// the swapchain texture shown on screen.
 export const PRESENT_SHADER = /* wgsl */ `
 @group(0) @binding(0) var presentSampler: sampler;
 @group(0) @binding(1) var presentTexture: texture_2d<f32>;
