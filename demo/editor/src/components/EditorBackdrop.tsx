@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { LevaPanel, useControls, useCreateStore } from 'leva'
 
 import heroImage from '../assets/hero.png'
 import backgroundImage from '../assets/background.jpg'
@@ -29,10 +29,6 @@ type EditorBackdropProps = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
-}
-
-function toDraftValue(value: number) {
-  return String(value)
 }
 
 function EditorDocumentBackdrop() {
@@ -225,44 +221,7 @@ export function EditorBackdrop({
   onSteppedGradientSettingsChange,
   onAdaptiveTintSettingsChange,
 }: EditorBackdropProps) {
-  const stepsId = useId()
-  const stepHeightId = useId()
-  const contentWidthId = useId()
-  const easingDurationId = useId()
-  const easingDelayId = useId()
-  const [stepsDraft, setStepsDraft] = useState(() => toDraftValue(steppedGradientSettings.steps))
-  const [stepHeightDraft, setStepHeightDraft] = useState(() =>
-    toDraftValue(steppedGradientSettings.stepHeight),
-  )
-  const [contentWidthDraft, setContentWidthDraft] = useState(() =>
-    toDraftValue(steppedGradientSettings.contentWidth),
-  )
-  const [easingDurationDraft, setEasingDurationDraft] = useState(() =>
-    toDraftValue(adaptiveTintSettings.easingDurationMs),
-  )
-  const [easingDelayDraft, setEasingDelayDraft] = useState(() =>
-    toDraftValue(adaptiveTintSettings.easingDelayMs),
-  )
-
-  useEffect(() => {
-    setStepsDraft(toDraftValue(steppedGradientSettings.steps))
-  }, [steppedGradientSettings.steps])
-
-  useEffect(() => {
-    setStepHeightDraft(toDraftValue(steppedGradientSettings.stepHeight))
-  }, [steppedGradientSettings.stepHeight])
-
-  useEffect(() => {
-    setContentWidthDraft(toDraftValue(steppedGradientSettings.contentWidth))
-  }, [steppedGradientSettings.contentWidth])
-
-  useEffect(() => {
-    setEasingDurationDraft(toDraftValue(adaptiveTintSettings.easingDurationMs))
-  }, [adaptiveTintSettings.easingDurationMs])
-
-  useEffect(() => {
-    setEasingDelayDraft(toDraftValue(adaptiveTintSettings.easingDelayMs))
-  }, [adaptiveTintSettings.easingDelayMs])
+  const store = useCreateStore()
 
   function updateSteps(nextValue: number) {
     onSteppedGradientSettingsChange({
@@ -299,149 +258,63 @@ export function EditorBackdrop({
     })
   }
 
-  function commitStepsDraft() {
-    const nextValue = Number(stepsDraft)
-    if (!Number.isFinite(nextValue)) {
-      setStepsDraft(toDraftValue(steppedGradientSettings.steps))
-      return
-    }
-    updateSteps(nextValue)
-  }
-
-  function commitStepHeightDraft() {
-    const nextValue = Number(stepHeightDraft)
-    if (!Number.isFinite(nextValue)) {
-      setStepHeightDraft(toDraftValue(steppedGradientSettings.stepHeight))
-      return
-    }
-    updateStepHeight(nextValue)
-  }
-
-  function commitContentWidthDraft() {
-    const nextValue = Number(contentWidthDraft)
-    if (!Number.isFinite(nextValue)) {
-      setContentWidthDraft(toDraftValue(steppedGradientSettings.contentWidth))
-      return
-    }
-    updateContentWidth(nextValue)
-  }
-
-  function commitEasingDurationDraft() {
-    const nextValue = Number(easingDurationDraft)
-    if (!Number.isFinite(nextValue)) {
-      setEasingDurationDraft(toDraftValue(adaptiveTintSettings.easingDurationMs))
-      return
-    }
-    updateEasingDurationMs(nextValue)
-  }
-
-  function commitEasingDelayDraft() {
-    const nextValue = Number(easingDelayDraft)
-    if (!Number.isFinite(nextValue)) {
-      setEasingDelayDraft(toDraftValue(adaptiveTintSettings.easingDelayMs))
-      return
-    }
-    updateEasingDelayMs(nextValue)
-  }
+  useControls(
+    () => ({
+      mode: {
+        value: mode,
+        options: {
+          Editor: 'editor',
+          Steps: 'steppedGradient',
+        },
+        onChange: (value) => onModeChange(value as BackdropMode),
+      },
+      steps: {
+        value: steppedGradientSettings.steps,
+        min: 2,
+        max: 64,
+        step: 1,
+        onChange: updateSteps,
+      },
+      stepHeight: {
+        value: steppedGradientSettings.stepHeight,
+        min: 32,
+        max: 480,
+        step: 1,
+        onChange: updateStepHeight,
+      },
+      contentWidth: {
+        value: steppedGradientSettings.contentWidth,
+        min: 200,
+        max: 1600,
+        step: 1,
+        onChange: updateContentWidth,
+      },
+      tintEasingMs: {
+        value: adaptiveTintSettings.easingDurationMs,
+        min: 1,
+        max: 5000,
+        step: 1,
+        onChange: updateEasingDurationMs,
+      },
+      tintDelayMs: {
+        value: adaptiveTintSettings.easingDelayMs,
+        min: 0,
+        max: 5000,
+        step: 25,
+        onChange: updateEasingDelayMs,
+      },
+    }),
+    { store },
+  )
 
   return (
     <div className="editor-backdrop">
-      <div className="editor-backdrop__toolbar">
-        <div className="editor-backdrop__switcher" role="tablist" aria-label="Backdrop switcher">
-          <button
-            type="button"
-            className={
-              mode === 'editor'
-                ? 'editor-backdrop__switcher-button editor-backdrop__switcher-button--active'
-                : 'editor-backdrop__switcher-button'
-            }
-            onClick={() => onModeChange('editor')}
-          >
-            Editor
-          </button>
-          <button
-            type="button"
-            className={
-              mode === 'steppedGradient'
-                ? 'editor-backdrop__switcher-button editor-backdrop__switcher-button--active'
-                : 'editor-backdrop__switcher-button'
-            }
-            onClick={() => onModeChange('steppedGradient')}
-          >
-            Steps
-          </button>
-        </div>
-
-        <details className="editor-backdrop__settings">
-          <summary>Backdrop settings</summary>
-          <div className="editor-backdrop__settings-panel">
-            <label className="editor-backdrop__settings-field" htmlFor={stepsId}>
-              <span>Number of steps</span>
-              <input
-                id={stepsId}
-                type="number"
-                min={2}
-                max={64}
-                step={1}
-                value={stepsDraft}
-                onChange={(event) => setStepsDraft(event.currentTarget.value)}
-                onBlur={commitStepsDraft}
-              />
-            </label>
-            <label className="editor-backdrop__settings-field" htmlFor={stepHeightId}>
-              <span>Step height</span>
-              <input
-                id={stepHeightId}
-                type="number"
-                min={32}
-                max={480}
-                step={1}
-                value={stepHeightDraft}
-                onChange={(event) => setStepHeightDraft(event.currentTarget.value)}
-                onBlur={commitStepHeightDraft}
-              />
-            </label>
-            <label className="editor-backdrop__settings-field" htmlFor={contentWidthId}>
-              <span>Content width</span>
-              <input
-                id={contentWidthId}
-                type="number"
-                min={200}
-                max={1600}
-                step={1}
-                value={contentWidthDraft}
-                onChange={(event) => setContentWidthDraft(event.currentTarget.value)}
-                onBlur={commitContentWidthDraft}
-              />
-            </label>
-            <label className="editor-backdrop__settings-field" htmlFor={easingDurationId}>
-              <span>Tint easing</span>
-              <input
-                id={easingDurationId}
-                type="number"
-                min={1}
-                max={5000}
-                step={1}
-                value={easingDurationDraft}
-                onChange={(event) => setEasingDurationDraft(event.currentTarget.value)}
-                onBlur={commitEasingDurationDraft}
-              />
-            </label>
-            <label className="editor-backdrop__settings-field" htmlFor={easingDelayId}>
-              <span>Tint delay</span>
-              <input
-                id={easingDelayId}
-                type="number"
-                min={0}
-                max={5000}
-                step={25}
-                value={easingDelayDraft}
-                onChange={(event) => setEasingDelayDraft(event.currentTarget.value)}
-                onBlur={commitEasingDelayDraft}
-              />
-            </label>
-          </div>
-        </details>
+      <div className="editor-backdrop__leva">
+        <LevaPanel
+          store={store}
+          neverHide
+          titleBar={{ title: 'Backdrop', drag: false, filter: false }}
+        />
       </div>
 
       <div className="editor-backdrop__content">

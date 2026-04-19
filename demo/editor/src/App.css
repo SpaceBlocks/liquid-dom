@@ -86,6 +86,11 @@
   overflow: auto;
 }
 
+.editor-panel--leva {
+  padding: 0;
+  overflow: hidden;
+}
+
 .editor-panel__header {
   display: flex;
   align-items: start;
@@ -95,8 +100,6 @@
 }
 
 .editor-panel__toolbar,
-.editor-empty__actions,
-.editor-actions,
 .editor-tree__actions {
   display: flex;
   gap: 8px;
@@ -104,8 +107,6 @@
 }
 
 .editor-panel button,
-.editor-empty__actions button,
-.editor-actions button,
 .editor-tree__actions button {
   border: 0;
   border-radius: 999px;
@@ -116,8 +117,6 @@
 }
 
 .editor-panel button:hover,
-.editor-empty__actions button:hover,
-.editor-actions button:hover,
 .editor-tree__actions button:hover {
   background: rgba(255, 255, 255, 0.18);
 }
@@ -183,63 +182,6 @@
   background: rgba(88, 132, 255, 0.18);
 }
 
-.editor-empty {
-  padding: 12px 0 4px;
-  color: #c3cae5;
-}
-
-.editor-empty p {
-  margin: 0 0 16px;
-  line-height: 1.5;
-}
-
-.editor-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.editor-section h3 {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 650;
-}
-
-.editor-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.editor-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.editor-field--wide {
-  grid-column: 1 / -1;
-}
-
-.editor-field span {
-  color: #b6bed9;
-  font-size: 0.83rem;
-}
-
-.editor-field input,
-.editor-field select {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 10px 12px;
-  color: #f4f7ff;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.editor-field input:focus,
-.editor-field select:focus,
 .editor-tree__node:focus {
   outline: 2px solid rgba(122, 162, 255, 0.55);
   outline-offset: 2px;
@@ -253,82 +195,13 @@
   background: linear-gradient(135deg, #111419 0%, #161821 50%, #0d1016 100%);
 }
 
-.editor-backdrop__toolbar {
+.editor-backdrop__leva {
   position: sticky;
-  top: 0;
+  top: 18px;
   z-index: 10;
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 14px;
+  display: grid;
+  justify-items: end;
   padding: 18px 18px 0;
-}
-
-.editor-backdrop__switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: rgba(12, 15, 21, 0.7);
-  backdrop-filter: blur(16px);
-}
-
-.editor-backdrop__switcher-button {
-  border: 0;
-  border-radius: 999px;
-  padding: 9px 14px;
-  color: rgba(243, 246, 255, 0.82);
-  background: transparent;
-  cursor: pointer;
-}
-
-.editor-backdrop__switcher-button--active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.editor-backdrop__settings {
-  width: min(280px, 100%);
-  padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  background: rgba(12, 15, 21, 0.7);
-  backdrop-filter: blur(16px);
-}
-
-.editor-backdrop__settings summary {
-  cursor: pointer;
-  color: rgba(245, 247, 255, 0.92);
-  font-size: 0.88rem;
-  font-weight: 600;
-  user-select: none;
-}
-
-.editor-backdrop__settings-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.editor-backdrop__settings-field {
-  display: grid;
-  gap: 6px;
-}
-
-.editor-backdrop__settings-field span {
-  color: rgba(218, 225, 244, 0.76);
-  font-size: 0.78rem;
-}
-
-.editor-backdrop__settings-field input {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 8px 10px;
-  color: #f4f7ff;
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .editor-backdrop__content {

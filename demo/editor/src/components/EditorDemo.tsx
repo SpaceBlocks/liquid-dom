@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { button, folder, LevaPanel, useControls, useCreateStore } from 'leva'
+import { useEffect, useRef, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import {
   Container,
@@ -528,10 +529,6 @@ function nodeTypeLabel(type: EditorNode['type'] | 'scene') {
   return 'Glass'
 }
 
-function toDisplayNumber(value: number, precision = 2) {
-  return Number(value.toFixed(precision))
-}
-
 function smoothstep(edge0: number, edge1: number, value: number) {
   const t = clamp((value - edge0) / Math.max(edge1 - edge0, Number.EPSILON), 0, 1)
   return t * t * (3 - 2 * t)
@@ -578,6 +575,305 @@ function loadBackdropSettings(): BackdropSettings {
         (storedAdaptiveTint.easingSpeed ? Math.round(1000 / storedAdaptiveTint.easingSpeed) : DEFAULT_BACKDROP_SETTINGS.adaptiveTint.easingDurationMs),
     },
   }
+}
+
+type InspectorControlsProps = {
+  selectedId: string
+  selectedNode: EditorNode | null
+  removeSelectedNode: () => void
+  addRootChild: (type: 'group' | 'container') => void
+  addChild: (parentId: string, type: 'group' | 'container' | 'glass') => void
+  updateSelectedNode: (update: (node: EditorNode) => EditorNode) => void
+}
+
+function InspectorControls({
+  selectedId,
+  selectedNode,
+  removeSelectedNode,
+  addRootChild,
+  addChild,
+  updateSelectedNode,
+}: InspectorControlsProps) {
+  const store = useCreateStore()
+
+  useControls(
+    () => {
+      if (selectedId === SCENE_ID || !selectedNode) {
+        return {
+          scene: folder(
+            {
+              selection: {
+                value: 'Scene root',
+                disabled: true,
+              },
+              addRootGroup: button(() => addRootChild('group')),
+              addRootContainer: button(() => addRootChild('container')),
+            },
+            { collapsed: false },
+          ),
+        } as any
+      }
+
+      const baseSchema = {
+        actions: folder(
+          {
+            remove: button(removeSelectedNode),
+          },
+          { collapsed: false },
+        ),
+        identity: folder(
+          {
+            name: {
+              value: selectedNode.name,
+              onChange: (value: string) => updateSelectedNode((node) => ({ ...node, name: value })),
+            },
+            type: {
+              value: nodeTypeLabel(selectedNode.type),
+              disabled: true,
+            },
+          },
+          { collapsed: false },
+        ),
+        transform: folder(
+          {
+            x: {
+              value: selectedNode.x,
+              step: 1,
+              onChange: (value: number) => updateSelectedNode((node) => ({ ...node, x: value })),
+            },
+            y: {
+              value: selectedNode.y,
+              step: 1,
+              onChange: (value: number) => updateSelectedNode((node) => ({ ...node, y: value })),
+            },
+            scaleX: {
+              value: selectedNode.scaleX,
+              step: 0.05,
+              onChange: (value: number) => updateSelectedNode((node) => ({ ...node, scaleX: value })),
+            },
+            scaleY: {
+              value: selectedNode.scaleY,
+              step: 0.05,
+              onChange: (value: number) => updateSelectedNode((node) => ({ ...node, scaleY: value })),
+            },
+            rotation: {
+              value: selectedNode.rotation,
+              step: 0.01,
+              onChange: (value: number) => updateSelectedNode((node) => ({ ...node, rotation: value })),
+            },
+            originX: {
+              value: selectedNode.origin.x,
+              step: 1,
+              onChange: (value: number) =>
+                updateSelectedNode((node) => ({
+                  ...node,
+                  origin: { ...node.origin, x: value },
+                })),
+            },
+            originY: {
+              value: selectedNode.origin.y,
+              step: 1,
+              onChange: (value: number) =>
+                updateSelectedNode((node) => ({
+                  ...node,
+                  origin: { ...node.origin, y: value },
+                })),
+            },
+          },
+          { collapsed: false },
+        ),
+      }
+
+      if (selectedNode.type === 'group') {
+        return {
+          ...baseSchema,
+          children: folder(
+            {
+              addGroup: button(() => addChild(selectedNode.id, 'group')),
+              addContainer: button(() => addChild(selectedNode.id, 'container')),
+            },
+            { collapsed: false },
+          ),
+        } as any
+      }
+
+      if (selectedNode.type === 'container') {
+        return {
+          ...baseSchema,
+          children: folder(
+            {
+              addGlass: button(() => addChild(selectedNode.id, 'glass')),
+            },
+            { collapsed: false },
+          ),
+          container: folder(
+            {
+              spacing: {
+                value: selectedNode.spacing,
+                step: 0.25,
+                onChange: (value: number) => updateSelectedNode((node) => ({ ...node, spacing: value })),
+              },
+              blur: {
+                value: selectedNode.blur,
+                step: 0.25,
+                onChange: (value: number) => updateSelectedNode((node) => ({ ...node, blur: value })),
+              },
+              bezelWidth: {
+                value: selectedNode.bezelWidth,
+                step: 0.25,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, bezelWidth: value })),
+              },
+              thickness: {
+                value: selectedNode.thickness,
+                step: 0.25,
+                onChange: (value: number) => updateSelectedNode((node) => ({ ...node, thickness: value })),
+              },
+              displacementFactor: {
+                value: selectedNode.displacementFactor,
+                step: 0.05,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, displacementFactor: value })),
+              },
+              ior: {
+                value: selectedNode.ior,
+                step: 0.01,
+                onChange: (value: number) => updateSelectedNode((node) => ({ ...node, ior: value })),
+              },
+              dispersion: {
+                value: selectedNode.dispersion,
+                step: 0.01,
+                onChange: (value: number) => updateSelectedNode((node) => ({ ...node, dispersion: value })),
+              },
+              surfaceProfile: {
+                value: selectedNode.surfaceProfile,
+                options: SURFACE_PROFILES.reduce<Record<string, SurfaceProfile>>((profiles, option) => {
+                  profiles[option.label] = option.value
+                  return profiles
+                }, {}),
+                onChange: (value: SurfaceProfile) =>
+                  updateSelectedNode((node) => ({ ...node, surfaceProfile: value })),
+              },
+              lightDirection: {
+                value: selectedNode.lightDirection,
+                step: 0.01,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, lightDirection: value })),
+              },
+              specularStrength: {
+                value: selectedNode.specularStrength,
+                step: 0.05,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, specularStrength: value })),
+              },
+              specularWidth: {
+                value: selectedNode.specularWidth,
+                step: 0.05,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, specularWidth: value })),
+              },
+              specularSharpness: {
+                value: selectedNode.specularSharpness,
+                step: 0.1,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, specularSharpness: value })),
+              },
+              specularOpacity: {
+                value: selectedNode.specularOpacity,
+                step: 0.01,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, specularOpacity: value })),
+              },
+              edgeSaturation: {
+                value: selectedNode.edgeSaturation,
+                step: 0.05,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, edgeSaturation: value })),
+              },
+              reflectionOffset: {
+                value: selectedNode.reflectionOffset,
+                step: 0.25,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, reflectionOffset: value })),
+              },
+              reflectionSaturation: {
+                value: selectedNode.reflectionSaturation,
+                step: 0.05,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) => ({ ...node, reflectionSaturation: value })),
+              },
+              tintColor: {
+                value: tintToHex(selectedNode.tint),
+                onChange: (value: string) =>
+                  updateSelectedNode((node) =>
+                    node.type === 'container' ? { ...node, tint: hexToTint(value, node.tint.a) } : node,
+                  ),
+              },
+              tintAlpha: {
+                value: selectedNode.tint.a,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                onChange: (value: number) =>
+                  updateSelectedNode((node) =>
+                    node.type === 'container' ? { ...node, tint: { ...node.tint, a: value } } : node,
+                  ),
+              },
+              zIndex: {
+                value: selectedNode.zIndex,
+                step: 1,
+                onChange: (value: number) => updateSelectedNode((node) => ({ ...node, zIndex: value })),
+              },
+            },
+            { collapsed: false },
+          ),
+        } as any
+      }
+
+      return {
+        ...baseSchema,
+        geometry: folder(
+          {
+            width: {
+              value: selectedNode.width,
+              step: 1,
+              onChange: (value: number) => updateSelectedNode((node) => ({ ...node, width: value })),
+            },
+            height: {
+              value: selectedNode.height,
+              step: 1,
+              onChange: (value: number) => updateSelectedNode((node) => ({ ...node, height: value })),
+            },
+            cornerRadius: {
+              value: selectedNode.cornerRadius,
+              step: 1,
+              onChange: (value: number) =>
+                updateSelectedNode((node) => ({ ...node, cornerRadius: value })),
+            },
+            cornerTransitionSpeed: {
+              value: selectedNode.cornerTransitionSpeed,
+              step: 0.25,
+              onChange: (value: number) =>
+                updateSelectedNode((node) => ({ ...node, cornerTransitionSpeed: value })),
+            },
+          },
+          { collapsed: false },
+        ),
+      } as any
+    },
+    { store },
+  )
+
+  return (
+    <LevaPanel
+      store={store}
+      fill
+      flat
+      neverHide
+      hideCopyButton
+      titleBar={{ title: 'Properties', drag: false, filter: false }}
+    />
+  )
 }
 
 export function EditorDemo() {
@@ -873,293 +1169,16 @@ export function EditorDemo() {
       </section>
 
       <aside className="editor-sidebar editor-sidebar--right">
-        <section className="editor-panel editor-panel--inspector">
-          <div className="editor-panel__header">
-            {selectedId !== SCENE_ID ? (
-              <button type="button" className="editor-panel__danger" onClick={removeSelectedNode}>
-                Remove
-              </button>
-            ) : null}
-          </div>
-
-          {selectedId === SCENE_ID ? (
-            <div className="editor-empty">
-              <p>
-                The root scene can contain groups and containers. Use the tree toolbar or the
-                buttons below to grow the graph.
-              </p>
-              <div className="editor-empty__actions">
-                <button type="button" onClick={() => addRootChild('group')}>
-                  Add root group
-                </button>
-                <button type="button" onClick={() => addRootChild('container')}>
-                  Add root container
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {selectedNode ? (
-            <>
-              <InspectorSection title="Identity">
-                <TextField
-                  label="Name"
-                  value={selectedNode.name}
-                  onChange={(value) => updateSelectedNode((node) => ({ ...node, name: value }))}
-                />
-              </InspectorSection>
-
-              <InspectorSection title="Transform">
-                <NumberField
-                  label="X"
-                  value={selectedNode.x}
-                  step={1}
-                  onChange={(value) => updateSelectedNode((node) => ({ ...node, x: value }))}
-                />
-                <NumberField
-                  label="Y"
-                  value={selectedNode.y}
-                  step={1}
-                  onChange={(value) => updateSelectedNode((node) => ({ ...node, y: value }))}
-                />
-                <NumberField
-                  label="Scale X"
-                  value={selectedNode.scaleX}
-                  step={0.05}
-                  onChange={(value) => updateSelectedNode((node) => ({ ...node, scaleX: value }))}
-                />
-                <NumberField
-                  label="Scale Y"
-                  value={selectedNode.scaleY}
-                  step={0.05}
-                  onChange={(value) => updateSelectedNode((node) => ({ ...node, scaleY: value }))}
-                />
-                <NumberField
-                  label="Rotation (rad)"
-                  value={selectedNode.rotation}
-                  step={0.01}
-                  onChange={(value) => updateSelectedNode((node) => ({ ...node, rotation: value }))}
-                />
-                <NumberField
-                  label="Origin X"
-                  value={selectedNode.origin.x}
-                  step={1}
-                  onChange={(value) =>
-                    updateSelectedNode((node) => ({
-                      ...node,
-                      origin: { ...node.origin, x: value },
-                    }))
-                  }
-                />
-                <NumberField
-                  label="Origin Y"
-                  value={selectedNode.origin.y}
-                  step={1}
-                  onChange={(value) =>
-                    updateSelectedNode((node) => ({
-                      ...node,
-                      origin: { ...node.origin, y: value },
-                    }))
-                  }
-                />
-              </InspectorSection>
-
-              {selectedNode.type === 'group' ? (
-                <InspectorSection title="Children">
-                  <ActionRow
-                    actions={[
-                      { label: 'Add group', onClick: () => addChild(selectedNode.id, 'group') },
-                      { label: 'Add container', onClick: () => addChild(selectedNode.id, 'container') },
-                    ]}
-                  />
-                </InspectorSection>
-              ) : null}
-
-              {selectedNode.type === 'container' ? (
-                <>
-                  <InspectorSection title="Children">
-                    <ActionRow actions={[{ label: 'Add glass', onClick: () => addChild(selectedNode.id, 'glass') }]} />
-                  </InspectorSection>
-                  <InspectorSection title="Container">
-                    <NumberField
-                      label="Spacing"
-                      value={selectedNode.spacing}
-                      step={0.25}
-                      onChange={(value) => updateSelectedNode((node) => ({ ...node, spacing: value }))}
-                    />
-                    <NumberField
-                      label="Blur"
-                      value={selectedNode.blur}
-                      step={0.25}
-                      onChange={(value) => updateSelectedNode((node) => ({ ...node, blur: value }))}
-                    />
-                    <NumberField
-                      label="Bezel width"
-                      value={selectedNode.bezelWidth}
-                      step={0.25}
-                      onChange={(value) => updateSelectedNode((node) => ({ ...node, bezelWidth: value }))}
-                    />
-                    <NumberField
-                      label="Thickness"
-                      value={selectedNode.thickness}
-                      step={0.25}
-                      onChange={(value) => updateSelectedNode((node) => ({ ...node, thickness: value }))}
-                    />
-                    <NumberField
-                      label="Displacement factor"
-                      value={selectedNode.displacementFactor}
-                      step={0.05}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, displacementFactor: value }))
-                      }
-                    />
-                    <NumberField
-                      label="IOR"
-                      value={selectedNode.ior}
-                      step={0.01}
-                      onChange={(value) => updateSelectedNode((node) => ({ ...node, ior: value }))}
-                    />
-                    <NumberField
-                      label="Dispersion"
-                      value={selectedNode.dispersion}
-                      step={0.01}
-                      onChange={(value) => updateSelectedNode((node) => ({ ...node, dispersion: value }))}
-                    />
-                    <SelectField
-                      label="Surface profile"
-                      value={selectedNode.surfaceProfile}
-                      options={SURFACE_PROFILES}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, surfaceProfile: value as SurfaceProfile }))
-                      }
-                    />
-                    <NumberField
-                      label="Light direction (rad)"
-                      value={selectedNode.lightDirection}
-                      step={0.01}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, lightDirection: value }))
-                      }
-                    />
-                    <NumberField
-                      label="Specular strength"
-                      value={selectedNode.specularStrength}
-                      step={0.05}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, specularStrength: value }))
-                      }
-                    />
-                    <NumberField
-                      label="Specular width"
-                      value={selectedNode.specularWidth}
-                      step={0.05}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, specularWidth: value }))
-                      }
-                    />
-                    <NumberField
-                      label="Specular sharpness"
-                      value={selectedNode.specularSharpness}
-                      step={0.1}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, specularSharpness: value }))
-                      }
-                    />
-                    <NumberField
-                      label="Specular opacity"
-                      value={selectedNode.specularOpacity}
-                      step={0.01}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, specularOpacity: value }))
-                      }
-                    />
-                    <NumberField
-                      label="Edge saturation"
-                      value={selectedNode.edgeSaturation}
-                      step={0.05}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, edgeSaturation: value }))
-                      }
-                    />
-                    <NumberField
-                      label="Reflection offset"
-                      value={selectedNode.reflectionOffset}
-                      step={0.25}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, reflectionOffset: value }))
-                      }
-                    />
-                    <NumberField
-                      label="Reflection saturation"
-                      value={selectedNode.reflectionSaturation}
-                      step={0.05}
-                      onChange={(value) =>
-                        updateSelectedNode((node) => ({ ...node, reflectionSaturation: value }))
-                      }
-                    />
-                    <ColorField
-                      label="Tint color"
-                      value={selectedNode.tint}
-                      onChange={(value) =>
-                        updateSelectedNode((node) =>
-                          node.type === 'container' ? { ...node, tint: hexToTint(value, node.tint.a) } : node,
-                        )
-                      }
-                    />
-                    <NumberField
-                      label="Tint alpha"
-                      value={selectedNode.tint.a}
-                      step={0.01}
-                      onChange={(value) =>
-                        updateSelectedNode((node) =>
-                          node.type === 'container' ? { ...node, tint: { ...node.tint, a: value } } : node,
-                        )
-                      }
-                    />
-                    <NumberField
-                      label="Z-index"
-                      value={selectedNode.zIndex}
-                      step={1}
-                      onChange={(value) => updateSelectedNode((node) => ({ ...node, zIndex: value }))}
-                    />
-                  </InspectorSection>
-                </>
-              ) : null}
-
-              {selectedNode.type === 'glass' ? (
-                <InspectorSection title="Geometry">
-                  <NumberField
-                    label="Width"
-                    value={selectedNode.width}
-                    step={1}
-                    onChange={(value) => updateSelectedNode((node) => ({ ...node, width: value }))}
-                  />
-                  <NumberField
-                    label="Height"
-                    value={selectedNode.height}
-                    step={1}
-                    onChange={(value) => updateSelectedNode((node) => ({ ...node, height: value }))}
-                  />
-                  <NumberField
-                    label="Corner radius"
-                    value={selectedNode.cornerRadius}
-                    step={1}
-                    onChange={(value) =>
-                      updateSelectedNode((node) => ({ ...node, cornerRadius: value }))
-                    }
-                  />
-                  <NumberField
-                    label="Corner transition speed"
-                    value={selectedNode.cornerTransitionSpeed}
-                    step={0.25}
-                    onChange={(value) =>
-                      updateSelectedNode((node) => ({ ...node, cornerTransitionSpeed: value }))
-                    }
-                  />
-                </InspectorSection>
-              ) : null}
-            </>
-          ) : null}
+        <section className="editor-panel editor-panel--leva">
+          <InspectorControls
+            key={selectedId}
+            selectedId={selectedId}
+            selectedNode={selectedNode}
+            removeSelectedNode={removeSelectedNode}
+            addRootChild={addRootChild}
+            addChild={addChild}
+            updateSelectedNode={updateSelectedNode}
+          />
         </section>
       </aside>
     </div>
@@ -1233,109 +1252,6 @@ function TreeNodeView({ node, selectedId, onSelect, onAddChild }: TreeNodeViewPr
           )
         })}
       </div>
-    </div>
-  )
-}
-
-type InspectorSectionProps = {
-  title: string
-  children: ReactNode
-}
-
-function InspectorSection({ title, children }: InspectorSectionProps) {
-  return (
-    <section className="editor-section">
-      <h3>{title}</h3>
-      <div className="editor-fields">{children}</div>
-    </section>
-  )
-}
-
-type NumberFieldProps = {
-  label: string
-  value: number
-  step: number
-  onChange: (value: number) => void
-}
-
-function NumberField({ label, value, step, onChange }: NumberFieldProps) {
-  return (
-    <label className="editor-field">
-      <span>{label}</span>
-      <input
-        type="number"
-        value={toDisplayNumber(value, 3)}
-        step={step}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </label>
-  )
-}
-
-type TextFieldProps = {
-  label: string
-  value: string
-  onChange: (value: string) => void
-}
-
-function TextField({ label, value, onChange }: TextFieldProps) {
-  return (
-    <label className="editor-field editor-field--wide">
-      <span>{label}</span>
-      <input type="text" value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  )
-}
-
-type SelectFieldProps = {
-  label: string
-  value: string
-  options: Array<{ value: string; label: string }>
-  onChange: (value: string) => void
-}
-
-function SelectField({ label, value, options, onChange }: SelectFieldProps) {
-  return (
-    <label className="editor-field editor-field--wide">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
-
-type ColorFieldProps = {
-  label: string
-  value: TintColor
-  onChange: (value: string) => void
-}
-
-function ColorField({ label, value, onChange }: ColorFieldProps) {
-  return (
-    <label className="editor-field editor-field--wide">
-      <span>{label}</span>
-      <input type="color" value={tintToHex(value)} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  )
-}
-
-type ActionRowProps = {
-  actions: Array<{ label: string; onClick: () => void }>
-}
-
-function ActionRow({ actions }: ActionRowProps) {
-  return (
-    <div className="editor-actions">
-      {actions.map((action) => (
-        <button key={action.label} type="button" onClick={action.onClick}>
-          {action.label}
-        </button>
-      ))}
     </div>
   )
 }
