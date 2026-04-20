@@ -774,7 +774,7 @@ export class Renderer {
 
     this.globals[20] = container.oppositeSpecularStrength
     this.globals[21] = container.reflectionOffset * dpr
-    this.globals[22] = container.oppositeSpecularWidth * dpr
+    this.globals[22] = 0
     this.globals[23] = shapeCount
 
     this.globals[24] = container.tint.r

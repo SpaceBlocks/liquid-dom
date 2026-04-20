@@ -313,13 +313,13 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   // White specular is a separate rim-only highlight driven by 2D normal/light alignment and
   // then masked back to the configured rim band.
   let primaryBandProgress = clamp(inwardDistance / max(globals.specularPrimary.y, pixelWidth), 0.0, 1.0);
-  let oppositeBandProgress = clamp(inwardDistance / max(globals.specularSecondary.z, pixelWidth), 0.0, 1.0);
+  let oppositeBandProgress = primaryBandProgress;
   let primaryStrength = globals.specularPrimary.x - globals.lighting.z * primaryBandProgress * primaryBandProgress;
   let oppositeStrength =
     globals.specularSecondary.x - globals.lighting.z * oppositeBandProgress * oppositeBandProgress;
   let oppositeRimBandMask = 1.0 - smoothstep(
-    globals.specularSecondary.z,
-    globals.specularSecondary.z + pixelWidth,
+    globals.specularPrimary.y,
+    globals.specularPrimary.y + pixelWidth,
     inwardDistance,
   );
   let rimSpecular = pow(max(dot(rimNormal, lightDir), 0.0), globals.specularPrimary.z);

@@ -86,7 +86,6 @@ type ContainerNode = BaseNode & {
   specularWidth: number
   specularFalloff: number
   oppositeSpecularStrength: number
-  oppositeSpecularWidth: number
   specularSharpness: number
   specularOpacity: number
   reflectionOffset: number
@@ -216,7 +215,6 @@ function createContainerNode(overrides: Partial<ContainerNode> = {}): ContainerN
     specularWidth: overrides.specularWidth ?? 0.3,
     specularFalloff: overrides.specularFalloff ?? 0,
     oppositeSpecularStrength: overrides.oppositeSpecularStrength ?? overrides.specularStrength ?? 1.4,
-    oppositeSpecularWidth: overrides.oppositeSpecularWidth ?? overrides.specularWidth ?? 0.3,
     specularSharpness: overrides.specularSharpness ?? 2,
     specularOpacity: overrides.specularOpacity ?? 0.15,
     reflectionOffset: overrides.reflectionOffset ?? 18,
@@ -481,7 +479,6 @@ function buildRuntimeNode(node: RootNode): RuntimeBuildResult {
     specularWidth: node.specularWidth,
     specularFalloff: node.specularFalloff,
     oppositeSpecularStrength: node.oppositeSpecularStrength,
-    oppositeSpecularWidth: node.oppositeSpecularWidth,
     specularSharpness: node.specularSharpness,
     specularOpacity: node.specularOpacity,
     reflectionOffset: node.reflectionOffset,
@@ -785,12 +782,6 @@ function InspectorControls({
                 step: 0.05,
                 onChange: (value: number) =>
                   updateSelectedNode((node) => ({ ...node, oppositeSpecularStrength: value })),
-              },
-              oppositeSpecularWidth: {
-                value: selectedNode.oppositeSpecularWidth,
-                step: 0.05,
-                onChange: (value: number) =>
-                  updateSelectedNode((node) => ({ ...node, oppositeSpecularWidth: value })),
               },
               specularSharpness: {
                 value: selectedNode.specularSharpness,
