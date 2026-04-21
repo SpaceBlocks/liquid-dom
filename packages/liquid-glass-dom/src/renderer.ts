@@ -29,9 +29,7 @@ const BACKDROP_METRICS_BYTES_PER_ROW = 256
 const BACKDROP_METRICS_BUFFER_SIZE = BACKDROP_METRICS_BYTES_PER_ROW * BACKDROP_METRICS_SIZE
 const CONTENT_ATLAS_PADDING = 1
 
-type HTMLCanvasElementWithSubtree = HTMLCanvasElement & {
-  requestPaint?: () => void
-}
+type HTMLCanvasElementWithSubtree = HTMLCanvasElement
 
 type GPUQueueWithElementCopy = GPUQueue & {
   copyElementImageToTexture: (
@@ -368,6 +366,7 @@ export class Renderer {
   private readonly glassContentHosts = new Set<HTMLDivElement>()
 
   private initPromise: Promise<void> | null = null
+  private unsubscribeSceneMutations: (() => void) | null = null
   private initError: unknown = null
   private destroyed = false
   private initialized = false
@@ -376,6 +375,8 @@ export class Renderer {
   private needsBackgroundCopy = true
   private needsContentCopy = false
   private pendingRender = false
+  private pendingSceneContentSync = true
+  private sceneContentSyncQueued = false
   private currentDpr = 1
   private resizeObserver: ResizeObserver | null = null
 
@@ -431,6 +432,10 @@ export class Renderer {
     }
   }
 
+  private readonly handleSceneMutation = () => {
+    this.queueSceneContentSync()
+  }
+
   /**
    * Creates a renderer and begins asynchronous WebGPU initialization immediately.
    */
@@ -449,6 +454,7 @@ export class Renderer {
     this.htmlRoot.style.overflow = 'hidden'
     this.targetCanvas.append(this.htmlRoot)
     this.targetCanvas.addEventListener('paint', this.handlePaintEvent as EventListener)
+    this.unsubscribeSceneMutations = this.scene._subscribe(this.handleSceneMutation)
 
     this.canvas = this.targetCanvas
     this.initPromise = this.initialize().catch((error) => {
@@ -533,6 +539,8 @@ export class Renderer {
     this.destroyed = true
     this.pendingRender = false
     this.targetCanvas.removeEventListener('paint', this.handlePaintEvent as EventListener)
+    this.unsubscribeSceneMutations?.()
+    this.unsubscribeSceneMutations = null
     this.resizeObserver?.disconnect()
     destroyTargets(this.targets)
     this.targets = null
@@ -741,9 +749,7 @@ export class Renderer {
       this.syncCanvasSize()
     })
     this.resizeObserver.observe(this.targetCanvas)
-
-    this.syncCanvasSize()
-    this.targetCanvas.requestPaint?.()
+    this.queueSceneContentSync()
   }
 
   private syncCanvasSize() {
@@ -777,7 +783,6 @@ export class Renderer {
       this.contentReady = this.glassContentEntries.size === 0
       this.needsBackgroundCopy = true
       this.needsContentCopy = this.glassContentEntries.size > 0
-      this.targetCanvas.requestPaint?.()
     }
 
     this.context.configure({
@@ -785,6 +790,8 @@ export class Renderer {
       format: this.presentationFormat,
       alphaMode: 'opaque',
     })
+
+    this.syncSceneContentNow()
   }
 
   private ensureShapesBuffer(requiredCount: number) {
@@ -929,6 +936,41 @@ export class Renderer {
     entry.host.remove()
     this.glassContentHosts.delete(entry.host)
     this.glassContentEntries.delete(glass)
+  }
+
+  private getSortedContainers() {
+    return flattenContainers(this.scene).sort(
+      (left, right) =>
+        left.container.zIndex - right.container.zIndex || left.traversalIndex - right.traversalIndex,
+    )
+  }
+
+  private queueSceneContentSync() {
+    this.pendingSceneContentSync = true
+
+    if (this.sceneContentSyncQueued || this.destroyed) {
+      return
+    }
+
+    this.sceneContentSyncQueued = true
+    queueMicrotask(() => {
+      this.sceneContentSyncQueued = false
+
+      if (this.destroyed || !this.pendingSceneContentSync) {
+        return
+      }
+
+      this.syncSceneContentNow()
+    })
+  }
+
+  private syncSceneContentNow() {
+    if (!this.initialized || !this.device) {
+      return
+    }
+
+    this.pendingSceneContentSync = false
+    this.syncGlassContent(this.getSortedContainers())
   }
 
   private syncGlassContent(containers: ReturnType<typeof flattenContainers>) {
@@ -1077,10 +1119,6 @@ export class Renderer {
     } else if (contentChanged) {
       this.contentReady = false
       this.needsContentCopy = true
-    }
-
-    if (this.needsContentCopy) {
-      this.targetCanvas.requestPaint?.()
     }
 
     return this.contentReady
@@ -1490,19 +1528,9 @@ export class Renderer {
       return
     }
 
-    this.syncCanvasSize()
-    if (!this.targets) {
-      this.targetCanvas.requestPaint?.()
-      return
-    }
+    const containers = this.getSortedContainers()
 
-    const containers = flattenContainers(this.scene).sort(
-      (left, right) => left.container.zIndex - right.container.zIndex || left.traversalIndex - right.traversalIndex,
-    )
-    const contentReady = this.syncGlassContent(containers)
-
-    if (!this.backgroundReady || !contentReady) {
-      this.targetCanvas.requestPaint?.()
+    if (!this.backgroundReady || !this.contentReady) {
       return
     }
 

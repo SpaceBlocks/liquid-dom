@@ -47,6 +47,7 @@ type SceneChild = Container | Group
 type GroupChild = Container | Group
 
 type ParentNode = Scene | Group | Container
+type SceneMutationListener = () => void
 
 type TraversedContainer = {
   container: Container
@@ -91,11 +92,31 @@ function applyTransformDefaults(target: Transform, options: Partial<Transform> |
   }
 }
 
+function findScene(node: { _parent: ParentNode | null } | ParentNode | null): Scene | null {
+  let current: ParentNode | null = node instanceof Scene ? node : node?._parent ?? null
+
+  while (current) {
+    if (current instanceof Scene) {
+      return current
+    }
+
+    current = current._parent
+  }
+
+  return null
+}
+
+function notifySceneMutation(node: { _parent: ParentNode | null } | ParentNode | null) {
+  findScene(node)?._notifyMutation()
+}
+
 function removeFromParent(node: { _parent: ParentNode | null }) {
   const parent = node._parent
   if (!parent) {
     return
   }
+
+  const scene = findScene(node)
 
   if (parent instanceof Scene || parent instanceof Group) {
     parent._children = parent._children.filter((child) => child !== node)
@@ -104,6 +125,7 @@ function removeFromParent(node: { _parent: ParentNode | null }) {
   }
 
   node._parent = null
+  scene?._notifyMutation()
 }
 
 function ensureNoCycle(parent: Group, child: Group) {
@@ -137,10 +159,37 @@ export class Glass implements Transform {
   /** Local-space transform origin in CSS pixels. */
   origin: Point = { x: 0, y: 0 }
 
+  private _width = 0
+  private _height = 0
+
   /** Shape width in CSS pixels. */
-  width = 0
+  get width() {
+    return this._width
+  }
+
+  set width(value: number) {
+    if (this._width === value) {
+      return
+    }
+
+    this._width = value
+    notifySceneMutation(this)
+  }
+
   /** Shape height in CSS pixels. */
-  height = 0
+  get height() {
+    return this._height
+  }
+
+  set height(value: number) {
+    if (this._height === value) {
+      return
+    }
+
+    this._height = value
+    notifySceneMutation(this)
+  }
+
   /** Corner radius in CSS pixels. */
   cornerRadius = 0
   /** Controls the blend from squircle-like corners toward circular corners. */
@@ -197,6 +246,7 @@ export class Glass implements Transform {
 
     this._content = element
     this._contentVersion += 1
+    notifySceneMutation(this)
   }
 
   /**
@@ -346,6 +396,7 @@ export class Container implements Transform {
     removeFromParent(child)
     this._children.push(child)
     child._parent = this
+    notifySceneMutation(child)
     return child
   }
 
@@ -396,6 +447,7 @@ export class Group implements Transform {
     removeFromParent(child)
     this._children.push(child)
     child._parent = this
+    notifySceneMutation(child)
     return child
   }
 
@@ -412,6 +464,7 @@ export class Group implements Transform {
  */
 export class Scene {
   _children: SceneChild[] = []
+  _listeners = new Set<SceneMutationListener>()
 
   /**
    * Adds a container or group to the scene, reparenting it if needed.
@@ -431,7 +484,21 @@ export class Scene {
     removeFromParent(child)
     this._children.push(child)
     child._parent = this
+    this._notifyMutation()
     return child
+  }
+
+  _subscribe(listener: SceneMutationListener) {
+    this._listeners.add(listener)
+    return () => {
+      this._listeners.delete(listener)
+    }
+  }
+
+  _notifyMutation() {
+    for (const listener of this._listeners) {
+      listener()
+    }
   }
 }
 
