@@ -188,7 +188,10 @@
 }
 
 .glass-button:hover {
-  transform: translateY(-1px);
+  transform: translateY(-3px);
+}
+.glass-button:active {
+  transform: translateY(3px);
 }
 
 @media (max-width: 980px) {
