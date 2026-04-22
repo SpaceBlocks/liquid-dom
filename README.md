@@ -36,6 +36,14 @@ import {
 } from 'liquid-glass-dom'
 ```
 
+```ts
+import {
+  trackElement,
+  type ElementTracker,
+  type TrackElementInit,
+} from 'liquid-glass-dom/track-element'
+```
+
 ## Quick Start
 
 ```ts
@@ -130,6 +138,52 @@ The public API uses the same coordinate system as normal HTML/CSS layout:
 That DOM subtree is copied into a GPU texture during the canvas `paint` event and becomes the source backdrop for blur, refraction, reflection, and glass tint.
 
 The renderer does not start its own render loop. You are responsible for calling `render()`.
+
+## Element Tracking
+
+Use `trackElement()` when you want a glass shape to follow an HTML element that lives outside the renderer canvas.
+
+```ts
+import { trackElement } from 'liquid-glass-dom/track-element'
+
+const trackedGlass = new Glass({
+  cornerRadius: 28,
+})
+
+container.add(trackedGlass)
+
+const target = document.querySelector<HTMLElement>('.card')
+if (!target) {
+  throw new Error('Expected .card to exist.')
+}
+
+const tracker = trackElement({
+  renderer,
+  element: target,
+  glass: trackedGlass,
+})
+
+// Use to manually trigger an update
+tracker.update()
+
+// Later, when you no longer need tracking:
+tracker.disconnect()
+```
+
+Behavior notes:
+
+- `trackElement()` measures the source element with `getBoundingClientRect()` and mirrors its axis-aligned `DOMRect`
+- tracked coordinates are converted into the glass container’s local space relative to `renderer.canvas`
+- updates are event-driven from resize, scroll, viewport, and scene-mutation signals
+- call `tracker.update()` after layout changes that do not emit those signals
+- tracking only writes `glass.x`, `glass.y`, `glass.width`, and `glass.height`
+
+Current v1 limits:
+
+- the tracked glass must stay unrotated and unscaled
+- all ancestor `Container` and `Group` transforms must be translation-only
+- CSS transforms on the source element are reflected only through the source element’s bounding box
+- scaled or rotated ancestor transforms are unsupported and cause `trackElement()` to throw during setup
 
 ## Types
 

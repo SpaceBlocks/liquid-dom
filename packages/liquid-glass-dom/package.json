@@ -10,6 +10,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./track-element": {
+      "types": "./dist/track-element.d.ts",
+      "import": "./dist/track-element.js",
+      "require": "./dist/track-element.cjs"
     }
   },
   "files": [
