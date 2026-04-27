@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { Container, Glass, Html, Renderer, Scene } from 'liquid-glass-dom'
 
 const INITIAL_GLASS_WIDTH = 320
-const GLASS_HEIGHT = 188
+const INITIAL_SCENE_HTML_WIDTH = 260
+const INITIAL_SHARED_HEIGHT = 188
 
 export default function TinyGlassDemo() {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const glassRef = useRef<Glass | null>(null)
   const glassContentRef = useRef<Html | null>(null)
+  const sceneHtmlRef = useRef<Html | null>(null)
   const [glassWidth, setGlassWidth] = useState(INITIAL_GLASS_WIDTH)
+  const [sceneHtmlWidth, setSceneHtmlWidth] = useState(INITIAL_SCENE_HTML_WIDTH)
+  const [sharedHeight, setSharedHeight] = useState(INITIAL_SHARED_HEIGHT)
 
   useEffect(() => {
     const glass = glassRef.current
@@ -20,6 +24,28 @@ export default function TinyGlassDemo() {
     glass.width = glassWidth
     glassContent.width = glassWidth
   }, [glassWidth])
+
+  useEffect(() => {
+    const sceneHtml = sceneHtmlRef.current
+    if (!sceneHtml) {
+      return
+    }
+
+    sceneHtml.width = sceneHtmlWidth
+  }, [sceneHtmlWidth])
+
+  useEffect(() => {
+    const glass = glassRef.current
+    const glassContent = glassContentRef.current
+    const sceneHtml = sceneHtmlRef.current
+    if (!glass || !glassContent || !sceneHtml) {
+      return
+    }
+
+    glass.height = sharedHeight
+    glassContent.height = sharedHeight
+    sceneHtml.height = sharedHeight
+  }, [sharedHeight])
 
   useEffect(() => {
     const mount = stageRef.current
@@ -43,6 +69,21 @@ export default function TinyGlassDemo() {
       element: backdropElement,
     }))
 
+    const sceneHtmlElement = document.createElement('div')
+    sceneHtmlElement.className = 'tiny-scene-card'
+    sceneHtmlElement.innerHTML = `
+      <span>second scene html</span>
+      <strong>Adjustable layer</strong>
+    `
+    const sceneHtml = scene.add(new Html({
+      x: 330,
+      y: 276,
+      width: sceneHtmlWidth,
+      height: sharedHeight,
+      zIndex: 1,
+      element: sceneHtmlElement,
+    }))
+
     const container = new Container({
       x: 116,
       y: 196,
@@ -57,7 +98,7 @@ export default function TinyGlassDemo() {
 
     const glass = new Glass({
       width: glassWidth,
-      height: GLASS_HEIGHT,
+      height: sharedHeight,
       cornerRadius: 54,
     })
 
@@ -70,7 +111,7 @@ export default function TinyGlassDemo() {
     `
     const glassContent = new Html({
       width: glassWidth,
-      height: GLASS_HEIGHT,
+      height: sharedHeight,
       element: glassContentElement,
     })
 
@@ -80,6 +121,7 @@ export default function TinyGlassDemo() {
 
     glassRef.current = glass
     glassContentRef.current = glassContent
+    sceneHtmlRef.current = sceneHtml
 
     const renderer = new Renderer({ scene })
     renderer.canvas.className = 'demo-canvas'
@@ -107,6 +149,7 @@ export default function TinyGlassDemo() {
       renderer.destroy()
       glassRef.current = null
       glassContentRef.current = null
+      sceneHtmlRef.current = null
     }
   }, [])
 
@@ -125,6 +168,30 @@ export default function TinyGlassDemo() {
           step="1"
           value={glassWidth}
           onChange={(event) => setGlassWidth(Number(event.currentTarget.value))}
+        />
+
+        <label htmlFor="tiny-scene-html-width">Scene HTML width</label>
+        <div className="tiny-width-readout">{sceneHtmlWidth}px</div>
+        <input
+          id="tiny-scene-html-width"
+          type="range"
+          min="180"
+          max="420"
+          step="1"
+          value={sceneHtmlWidth}
+          onChange={(event) => setSceneHtmlWidth(Number(event.currentTarget.value))}
+        />
+
+        <label htmlFor="tiny-shared-height">Shared height</label>
+        <div className="tiny-width-readout">{sharedHeight}px</div>
+        <input
+          id="tiny-shared-height"
+          type="range"
+          min="120"
+          max="220"
+          step="1"
+          value={sharedHeight}
+          onChange={(event) => setSharedHeight(Number(event.currentTarget.value))}
         />
       </aside>
     </section>

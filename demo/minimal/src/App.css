@@ -540,6 +540,7 @@
   height: 100%;
   padding: 28px 32px;
   color: #f4fffb;
+  border: 1px solid red;
 }
 
 .tiny-glass-content span {
@@ -557,6 +558,32 @@
   max-width: 290px;
   margin: 0;
   color: rgba(244, 255, 251, 0.76);
+}
+
+.tiny-scene-card {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 18px 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.1);
+  border-top: 1px solid red;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.24);
+}
+
+.tiny-scene-card span {
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(244, 255, 251, 0.64);
+}
+
+.tiny-scene-card strong {
+  font-size: 1.05rem;
+  color: #f4fffb;
 }
 
 @media (max-width: 1180px) {
