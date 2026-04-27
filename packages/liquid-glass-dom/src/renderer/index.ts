@@ -10,6 +10,7 @@ import {
 } from '../matrix'
 import {
   CONTENT_ATLAS_PADDING,
+  getTextureBucketSize,
   packContentAtlas,
   type GlassContentEntry,
 } from './content'
@@ -50,7 +51,9 @@ const GPU_TEXTURE_USAGE = {
   RENDER_ATTACHMENT: 0x10,
 } as const
 
-type HTMLCanvasElementWithSubtree = HTMLCanvasElement
+const SHAPE_DATA_FLOATS = 16
+const CONTENT_DATA_FLOATS = 12
+const HTML_COMPOSITE_PARAM_FLOATS = 12
 
 type GPUQueueWithElementCopy = GPUQueue & {
   copyElementImageToTexture: (
@@ -185,14 +188,10 @@ type GlassContentRange = {
 }
 
 type PreviousGlassContentAtlasEntry = {
-  deviceWidth: number
-  deviceHeight: number
   copiedDeviceWidth: number
   copiedDeviceHeight: number
   atlasX: number
   atlasY: number
-  atlasWidth: number
-  atlasHeight: number
 }
 
 type TextureCopyRegion = {
@@ -209,7 +208,6 @@ function createRenderTarget(
   format: GPUTextureFormat,
   width: number,
   height: number,
-  extraUsage = 0,
 ) {
   return device.createTexture({
     size: {
@@ -222,8 +220,7 @@ function createRenderTarget(
       GPU_TEXTURE_USAGE.COPY_SRC |
       GPU_TEXTURE_USAGE.TEXTURE_BINDING |
       GPU_TEXTURE_USAGE.RENDER_ATTACHMENT |
-      GPU_TEXTURE_USAGE.COPY_DST |
-      extraUsage,
+      GPU_TEXTURE_USAGE.COPY_DST,
   })
 }
 
@@ -237,22 +234,6 @@ function destroyTargets(targets: RenderTargetSet | null) {
   targets.blur.destroy()
   targets.sceneA.destroy()
   targets.sceneB.destroy()
-}
-
-function nextPowerOfTwo(value: number) {
-  let next = 1
-  while (next < value) {
-    next *= 2
-  }
-  return next
-}
-
-function getTextureBucketSize(requiredSize: number, maxTextureSize: number) {
-  if (requiredSize > maxTextureSize) {
-    throw new Error(`Texture size ${requiredSize} exceeds the maximum supported size ${maxTextureSize}.`)
-  }
-
-  return Math.min(nextPowerOfTwo(Math.max(1, requiredSize)), maxTextureSize)
 }
 
 function copyTextureRegion(
@@ -336,12 +317,12 @@ export class Renderer {
   /** Maximum device pixel ratio used for internal render targets. */
   maxDpr: number
 
-  private readonly targetCanvas: HTMLCanvasElementWithSubtree
+  private readonly targetCanvas: HTMLCanvasElement
   private readonly globals = new Float32Array(32)
   private readonly blurHorizontalParams = new Float32Array(4)
   private readonly blurVerticalParams = new Float32Array(4)
   private readonly backdropMetricsBounds = new Float32Array(4)
-  private readonly htmlCompositeParams = new Float32Array(16)
+  private readonly htmlCompositeParams = new Float32Array(HTML_COMPOSITE_PARAM_FLOATS)
   private readonly backdropMetricsStateByContainer = new WeakMap<Container, BackdropMetricsState>()
   private readonly trackedBackdropContainers = new Set<Container>()
   private readonly pendingBackdropMetricStates = new Set<BackdropMetricsState>()
@@ -355,15 +336,12 @@ export class Renderer {
   private glassInteractionOrder: GlassInteractionEntry[] = []
   private readonly pointerStates = new Map<number, PointerState>()
 
-  private initPromise: Promise<void> | null = null
   private unsubscribeSceneMutations: (() => void) | null = null
   private initError: unknown = null
   private destroyed = false
   private initialized = false
   private needsSceneHtmlCopy = false
   private needsContentCopy = false
-  private needsSceneHtmlPaintCopy = false
-  private needsContentPaintCopy = false
   private pendingSceneContentSync = true
   private sceneContentSyncQueued = false
   private currentDpr = 1
@@ -406,21 +384,19 @@ export class Renderer {
     const hasChangedElements = Array.isArray(changedElements)
     const shouldCopySceneHtml =
       this.needsSceneHtmlCopy ||
-      this.needsSceneHtmlPaintCopy ||
       !hasChangedElements ||
       changedElementsIncludeHost(changedElements, this.sceneHtmlHosts)
     const shouldCopyContent =
       this.needsContentCopy ||
-      this.needsContentPaintCopy ||
       !hasChangedElements ||
       changedElementsIncludeHost(changedElements, this.glassContentHosts)
 
     if (shouldCopySceneHtml) {
-      this.needsSceneHtmlPaintCopy = !this.copySceneHtmlTextures()
+      this.copySceneHtmlTextures()
     }
 
     if (shouldCopyContent) {
-      this.needsContentPaintCopy = !this.copyGlassContentAtlas()
+      this.copyGlassContentAtlas()
     }
   }
 
@@ -454,7 +430,7 @@ export class Renderer {
   constructor(options: RendererInit = {}) {
     this.scene = options.scene ?? new Scene()
     this.maxDpr = options.maxDpr ?? 2
-    this.targetCanvas = document.createElement('canvas') as HTMLCanvasElementWithSubtree
+    this.targetCanvas = document.createElement('canvas')
     this.targetCanvas.setAttribute('layoutsubtree', 'true')
     this.targetCanvas.style.display = 'block'
 
@@ -467,7 +443,7 @@ export class Renderer {
     this.unsubscribeSceneMutations = this.scene._subscribe(this.handleSceneMutation)
 
     this.canvas = this.targetCanvas
-    this.initPromise = this.initialize().catch((error) => {
+    void this.initialize().catch((error) => {
       this.initError = error
       console.error(error)
     })
@@ -869,7 +845,7 @@ export class Renderer {
 
     this.shapesBuffer?.destroy()
     this.shapesBuffer = this.device.createBuffer({
-      size: nextCapacity * 20 * Float32Array.BYTES_PER_ELEMENT,
+      size: nextCapacity * SHAPE_DATA_FLOATS * Float32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
     })
     this.shapeCapacity = nextCapacity
@@ -887,7 +863,7 @@ export class Renderer {
 
     this.contentEntriesBuffer?.destroy()
     this.contentEntriesBuffer = this.device.createBuffer({
-      size: nextCapacity * 16 * Float32Array.BYTES_PER_ELEMENT,
+      size: nextCapacity * CONTENT_DATA_FLOATS * Float32Array.BYTES_PER_ELEMENT,
       usage: GPU_BUFFER_USAGE.STORAGE | GPU_BUFFER_USAGE.COPY_DST,
     })
     this.contentEntryCapacity = nextCapacity
@@ -1497,13 +1473,11 @@ export class Renderer {
 
     if (activeHtml.size === 0) {
       this.needsSceneHtmlCopy = false
-      this.needsSceneHtmlPaintCopy = false
       return
     }
 
     if (layoutChanged || contentChanged) {
       this.needsSceneHtmlCopy = true
-      this.needsSceneHtmlPaintCopy = true
     }
   }
 
@@ -1519,14 +1493,10 @@ export class Renderer {
     if (previousAtlasTexture) {
       for (const entry of this.glassContentEntries.values()) {
         previousAtlasEntries.set(entry.html, {
-          deviceWidth: entry.deviceWidth,
-          deviceHeight: entry.deviceHeight,
           copiedDeviceWidth: entry.copiedDeviceWidth,
           copiedDeviceHeight: entry.copiedDeviceHeight,
           atlasX: entry.atlasX,
           atlasY: entry.atlasY,
-          atlasWidth: entry.atlasWidth,
-          atlasHeight: entry.atlasHeight,
         })
       }
     }
@@ -1575,10 +1545,6 @@ export class Renderer {
               copiedDeviceHeight: 0,
               atlasX: 0,
               atlasY: 0,
-              atlasWidth: 0,
-              atlasHeight: 0,
-              contentU: 0,
-              contentV: 0,
               inverseTransform,
             }
             this.glassContentEntries.set(html, contentEntry)
@@ -1643,11 +1609,8 @@ export class Renderer {
 
     if (!this.device) {
       this.needsContentCopy = false
-      this.needsContentPaintCopy = false
       return
     }
-
-    this.writeContentEntries(activeEntries)
 
     if (activeEntries.length === 0) {
       this.glassContentAtlas?.destroy()
@@ -1655,14 +1618,15 @@ export class Renderer {
       this.glassContentAtlasWidth = 0
       this.glassContentAtlasHeight = 0
       this.needsContentCopy = false
-      this.needsContentPaintCopy = false
       return
     }
 
-    if (layoutChanged) {
+    if (layoutChanged || !this.glassContentAtlas) {
       const layout = packContentAtlas(activeEntries, this.device.limits.maxTextureDimension2D)
       const nextAtlasWidth = Math.max(layout.width, 1)
       const nextAtlasHeight = Math.max(layout.height, 1)
+      const previousAtlasWidth = this.glassContentAtlasWidth
+      const previousAtlasHeight = this.glassContentAtlasHeight
       const atlasLayoutChanged =
         !this.glassContentAtlas ||
         nextAtlasWidth !== this.glassContentAtlasWidth ||
@@ -1672,9 +1636,7 @@ export class Renderer {
           return (
             !rect ||
             entry.atlasX !== rect.x ||
-            entry.atlasY !== rect.y ||
-            entry.atlasWidth !== nextAtlasWidth ||
-            entry.atlasHeight !== nextAtlasHeight
+            entry.atlasY !== rect.y
           )
         })
 
@@ -1712,14 +1674,12 @@ export class Renderer {
             const destinationY = rect.y + CONTENT_ATLAS_PADDING
             const copiedDeviceWidth = Math.min(
               previousEntry.copiedDeviceWidth,
-              previousEntry.deviceWidth,
-              previousEntry.atlasWidth - sourceX,
+              previousAtlasWidth - sourceX,
               nextAtlasWidth - destinationX,
             )
             const copiedDeviceHeight = Math.min(
               previousEntry.copiedDeviceHeight,
-              previousEntry.deviceHeight,
-              previousEntry.atlasHeight - sourceY,
+              previousAtlasHeight - sourceY,
               nextAtlasHeight - destinationY,
             )
 
@@ -1761,19 +1721,14 @@ export class Renderer {
 
         entry.atlasX = rect.x
         entry.atlasY = rect.y
-        entry.atlasWidth = nextAtlasWidth
-        entry.atlasHeight = nextAtlasHeight
-        entry.contentU = (rect.x + CONTENT_ATLAS_PADDING) / nextAtlasWidth
-        entry.contentV = (rect.y + CONTENT_ATLAS_PADDING) / nextAtlasHeight
       }
 
-      this.writeContentEntries(activeEntries)
       this.needsContentCopy = true
-      this.needsContentPaintCopy = true
     } else if (contentChanged) {
       this.needsContentCopy = true
-      this.needsContentPaintCopy = true
     }
+
+    this.writeContentEntries(activeEntries)
   }
 
   private writeContentEntries(entries: GlassContentEntry[]) {
@@ -1786,31 +1741,26 @@ export class Renderer {
       return
     }
 
-    const packed = new Float32Array(Math.max(entries.length, 1) * 16)
+    const packed = new Float32Array(Math.max(entries.length, 1) * CONTENT_DATA_FLOATS)
     for (let index = 0; index < entries.length; index += 1) {
       const entry = entries[index]
-      const offset = index * 16
+      const offset = index * CONTENT_DATA_FLOATS
       const inverse = entry.inverseTransform
 
       packed[offset + 0] = inverse.a
       packed[offset + 1] = inverse.c
       packed[offset + 2] = inverse.e
-      packed[offset + 3] = 0
+      packed[offset + 3] = getCopiedCssSize(entry.copiedDeviceWidth, entry.deviceWidth, entry.width)
 
       packed[offset + 4] = inverse.b
       packed[offset + 5] = inverse.d
       packed[offset + 6] = inverse.f
-      packed[offset + 7] = 0
+      packed[offset + 7] = getCopiedCssSize(entry.copiedDeviceHeight, entry.deviceHeight, entry.height)
 
-      packed[offset + 8] = entry.width
-      packed[offset + 9] = entry.height
-      packed[offset + 10] = getCopiedCssSize(entry.copiedDeviceWidth, entry.deviceWidth, entry.width)
-      packed[offset + 11] = getCopiedCssSize(entry.copiedDeviceHeight, entry.deviceHeight, entry.height)
-
-      packed[offset + 12] = entry.contentU
-      packed[offset + 13] = entry.contentV
-      packed[offset + 14] = getTextureUvScale(entry.deviceWidth, entry.width, entry.atlasWidth)
-      packed[offset + 15] = getTextureUvScale(entry.deviceHeight, entry.height, entry.atlasHeight)
+      packed[offset + 8] = (entry.atlasX + CONTENT_ATLAS_PADDING) / this.glassContentAtlasWidth
+      packed[offset + 9] = (entry.atlasY + CONTENT_ATLAS_PADDING) / this.glassContentAtlasHeight
+      packed[offset + 10] = getTextureUvScale(entry.deviceWidth, entry.width, this.glassContentAtlasWidth)
+      packed[offset + 11] = getTextureUvScale(entry.deviceHeight, entry.height, this.glassContentAtlasHeight)
     }
 
     this.device.queue.writeBuffer(this.contentEntriesBuffer, 0, packed)
@@ -1907,39 +1857,39 @@ export class Renderer {
     this.globals[3] = 0
 
     this.globals[4] = container.spacing * dpr
-    this.globals[5] = container.blur * dpr
-    this.globals[6] = 0
-    this.globals[7] = container.bezelWidth * dpr
+    this.globals[5] = container.bezelWidth * dpr
+    this.globals[6] = shapeCount
+    this.globals[7] = getSurfaceProfileIndex(container.surfaceProfile)
 
     this.globals[8] = container.thickness * dpr
     this.globals[9] = container.displacementFactor
     this.globals[10] = container.ior
     this.globals[11] = container.dispersion
 
-    this.globals[12] = Math.sin(container.lightDirection)
-    this.globals[13] = -Math.cos(container.lightDirection)
-    this.globals[14] = container.specularFalloff
-    this.globals[15] = container.contentIor
+    this.globals[12] = container.contentIor
+    this.globals[13] = container.contentDepth * dpr
+    this.globals[14] = 0
+    this.globals[15] = 0
 
-    this.globals[16] = container.specularStrength
-    this.globals[17] = container.specularWidth * dpr
-    this.globals[18] = container.specularSharpness
-    this.globals[19] = container.specularOpacity
+    this.globals[16] = Math.sin(container.lightDirection)
+    this.globals[17] = -Math.cos(container.lightDirection)
+    this.globals[18] = 0
+    this.globals[19] = 0
 
-    this.globals[20] = container.oppositeSpecularStrength
-    this.globals[21] = container.reflectionOffset * dpr
-    this.globals[22] = container.contentDepth * dpr
-    this.globals[23] = shapeCount
+    this.globals[20] = container.specularStrength
+    this.globals[21] = container.specularWidth * dpr
+    this.globals[22] = container.specularSharpness
+    this.globals[23] = container.specularOpacity
 
-    this.globals[24] = container.tint.r
-    this.globals[25] = container.tint.g
-    this.globals[26] = container.tint.b
-    this.globals[27] = container.tint.a
+    this.globals[24] = container.oppositeSpecularStrength
+    this.globals[25] = container.specularFalloff
+    this.globals[26] = container.reflectionOffset * dpr
+    this.globals[27] = 0
 
-    this.globals[28] = getSurfaceProfileIndex(container.surfaceProfile)
-    this.globals[29] = 0
-    this.globals[30] = 0
-    this.globals[31] = 0
+    this.globals[28] = container.tint.r
+    this.globals[29] = container.tint.g
+    this.globals[30] = container.tint.b
+    this.globals[31] = container.tint.a
 
     this.device.queue.writeBuffer(this.globalsBuffer, 0, this.globals)
   }
@@ -1979,7 +1929,7 @@ export class Renderer {
   private packShapes(container: Container, containerTransform: Matrix2D): PackedShapesResult {
     const dpr = this.currentDpr
     const glasses = this.getSortedGlasses(container)
-    const packed = new Float32Array(Math.max(glasses.length, 1) * 20)
+    const packed = new Float32Array(Math.max(glasses.length, 1) * SHAPE_DATA_FLOATS)
     const bounds = createEmptyBounds()
     let activeCount = 0
 
@@ -2000,7 +1950,7 @@ export class Renderer {
       expandBounds(bounds, bottomLeft.x, bottomLeft.y)
       expandBounds(bounds, bottomRight.x, bottomRight.y)
 
-      const offset = activeCount * 20
+      const offset = activeCount * SHAPE_DATA_FLOATS
       const contentRange = this.glassContentRanges.get(glass)
       const halfWidth = glass.width * 0.5
       const halfHeight = glass.height * 0.5
@@ -2016,18 +1966,13 @@ export class Renderer {
 
       packed[offset + 8] = halfWidth
       packed[offset + 9] = halfHeight
-      packed[offset + 10] = halfWidth
-      packed[offset + 11] = halfHeight
+      packed[offset + 10] = glass.cornerTransitionSpeed
+      packed[offset + 11] = 0
 
-      packed[offset + 12] = glass.cornerTransitionSpeed
-      packed[offset + 13] = 0
+      packed[offset + 12] = contentRange?.start ?? 0
+      packed[offset + 13] = contentRange?.count ?? 0
       packed[offset + 14] = 0
       packed[offset + 15] = 0
-
-      packed[offset + 16] = contentRange?.start ?? 0
-      packed[offset + 17] = contentRange?.count ?? 0
-      packed[offset + 18] = 0
-      packed[offset + 19] = 0
 
       activeCount += 1
     }
@@ -2296,17 +2241,12 @@ export class Renderer {
     this.htmlCompositeParams[4] = inverse.a
     this.htmlCompositeParams[5] = inverse.c
     this.htmlCompositeParams[6] = inverse.e
-    this.htmlCompositeParams[7] = 0
+    this.htmlCompositeParams[7] = getCopiedCssSize(entry.copiedDeviceWidth, entry.deviceWidth, entry.width)
 
     this.htmlCompositeParams[8] = inverse.b
     this.htmlCompositeParams[9] = inverse.d
     this.htmlCompositeParams[10] = inverse.f
-    this.htmlCompositeParams[11] = 0
-
-    this.htmlCompositeParams[12] = entry.width
-    this.htmlCompositeParams[13] = entry.height
-    this.htmlCompositeParams[14] = getCopiedCssSize(entry.copiedDeviceWidth, entry.deviceWidth, entry.width)
-    this.htmlCompositeParams[15] = getCopiedCssSize(entry.copiedDeviceHeight, entry.deviceHeight, entry.height)
+    this.htmlCompositeParams[11] = getCopiedCssSize(entry.copiedDeviceHeight, entry.deviceHeight, entry.height)
 
     this.device.queue.writeBuffer(this.htmlCompositeParamsBuffer, 0, this.htmlCompositeParams)
   }

@@ -15,18 +15,12 @@ export type GlassContentEntry = {
   copiedDeviceHeight: number
   atlasX: number
   atlasY: number
-  atlasWidth: number
-  atlasHeight: number
-  contentU: number
-  contentV: number
   inverseTransform: Matrix2D
 }
 
 type ContentLayoutRect = {
   x: number
   y: number
-  width: number
-  height: number
 }
 
 export type ContentAtlasLayout = {
@@ -43,8 +37,12 @@ function nextPowerOfTwo(value: number) {
   return next
 }
 
-function getContentBucketSize(requiredSize: number) {
-  return nextPowerOfTwo(Math.max(1, requiredSize))
+export function getTextureBucketSize(requiredSize: number, maxTextureSize = Number.POSITIVE_INFINITY) {
+  if (requiredSize > maxTextureSize) {
+    throw new Error(`Texture size ${requiredSize} exceeds the maximum supported size ${maxTextureSize}.`)
+  }
+
+  return Math.min(nextPowerOfTwo(Math.max(1, requiredSize)), maxTextureSize)
 }
 
 function tryPackContentAtlas(entries: GlassContentEntry[], atlasWidth: number) {
@@ -54,8 +52,8 @@ function tryPackContentAtlas(entries: GlassContentEntry[], atlasWidth: number) {
   let rowHeight = 0
 
   for (const entry of entries) {
-    const rectWidth = getContentBucketSize(entry.deviceWidth) + CONTENT_ATLAS_PADDING * 2
-    const rectHeight = getContentBucketSize(entry.deviceHeight) + CONTENT_ATLAS_PADDING * 2
+    const rectWidth = getTextureBucketSize(entry.deviceWidth) + CONTENT_ATLAS_PADDING * 2
+    const rectHeight = getTextureBucketSize(entry.deviceHeight) + CONTENT_ATLAS_PADDING * 2
 
     if (rectWidth > atlasWidth) {
       return null
@@ -70,8 +68,6 @@ function tryPackContentAtlas(entries: GlassContentEntry[], atlasWidth: number) {
     rects.set(entry.html, {
       x: cursorX,
       y: cursorY,
-      width: rectWidth,
-      height: rectHeight,
     })
 
     cursorX += rectWidth
@@ -92,7 +88,7 @@ export function packContentAtlas(entries: GlassContentEntry[], maxTextureSize: n
 
   let maxEntryWidth = 1
   for (const entry of entries) {
-    maxEntryWidth = Math.max(maxEntryWidth, getContentBucketSize(entry.deviceWidth) + CONTENT_ATLAS_PADDING * 2)
+    maxEntryWidth = Math.max(maxEntryWidth, getTextureBucketSize(entry.deviceWidth) + CONTENT_ATLAS_PADDING * 2)
   }
 
   let atlasWidth = nextPowerOfTwo(maxEntryWidth)

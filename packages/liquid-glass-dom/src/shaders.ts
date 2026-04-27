@@ -62,20 +62,19 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
 const SHADER_SHARED = /* wgsl */ `
 struct Globals {
   canvas: vec4f,
-  surface: vec4f,
+  shape: vec4f,
   glass: vec4f,
+  content: vec4f,
   lighting: vec4f,
-  specularPrimary: vec4f,
+  specular: vec4f,
   specularSecondary: vec4f,
   tint: vec4f,
-  profile: vec4f,
 };
 
 struct ShapeData {
   inverse0: vec4f,
   inverse1: vec4f,
-  bounds: vec4f,
-  shapeInfo: vec4f,
+  geometry: vec4f,
   contentRange: vec4f,
 };
 
@@ -120,11 +119,12 @@ fn shapeLocalPos(shape: ShapeData, pos: vec2f) -> vec2f {
 }
 
 fn shapeDistanceFromLocal(shape: ShapeData, localPos: vec2f) -> f32 {
+  let halfSize = shape.geometry.xy;
   let localDistance = sdRoundRect(
-    localPos - shape.bounds.xy,
-    shape.bounds.zw,
+    localPos - halfSize,
+    halfSize,
     shape.inverse1.w,
-    shape.shapeInfo.x,
+    shape.geometry.z,
   );
   return localDistance * shape.inverse0.w;
 }
@@ -236,7 +236,6 @@ ${SHADER_SHARED}
 struct ContentData {
   inverse0: vec4f,
   inverse1: vec4f,
-  bounds: vec4f,
   atlasRect: vec4f,
 };
 
@@ -258,10 +257,8 @@ fn contentLocalPos(content: ContentData, glassLocalPos: vec2f) -> vec2f {
 }
 
 fn sampleGlassContentAtlas(content: ContentData, localPos: vec2f) -> vec4f {
-  let size = content.bounds.xy;
-  let copiedSize = content.bounds.zw;
+  let copiedSize = vec2f(content.inverse0.w, content.inverse1.w);
   if (
-    any(size <= vec2f(0.0)) ||
     any(copiedSize <= vec2f(0.0)) ||
     any(content.atlasRect.zw <= vec2f(0.0)) ||
     any(localPos < vec2f(0.0)) ||
@@ -294,15 +291,15 @@ fn sampleGlassContentEntry(
 
 @fragment
 fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
-  let shapeCount = u32(globals.specularSecondary.w);
+  let shapeCount = u32(globals.shape.z);
   let fragCoord = in.uv * globals.canvas.xy;
   let background = sampleBackgroundSharp(in.uv);
 
-  let distance = sceneSdf(fragCoord, shapeCount, globals.surface.x);
+  let distance = sceneSdf(fragCoord, shapeCount, globals.shape.x);
   let fillMask = 1.0 - smoothstep(0.0, 1.4, distance);
-  let gradient = sdfGradient(fragCoord, shapeCount, globals.surface.x);
+  let gradient = sdfGradient(fragCoord, shapeCount, globals.shape.x);
   let pixelWidth = max(fwidth(distance), 0.75);
-  let rimWidth = max(globals.specularPrimary.y, 0.0001);
+  let rimWidth = max(globals.specular.y, 0.0001);
   let rimBandMask =
     (1.0 - smoothstep(0.0, pixelWidth, distance)) *
     (1.0 - smoothstep(rimWidth, rimWidth + pixelWidth, -distance));
@@ -312,12 +309,12 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   );
   let mirroredLightDir = -lightDir;
 
-  let bezelWidth = max(globals.surface.w, pixelWidth * 2.0);
+  let bezelWidth = max(globals.shape.y, pixelWidth * 2.0);
   let inwardDistance = max(-distance, 0.0);
   let bezelProgress = clamp(inwardDistance / bezelWidth, 0.0, 1.0);
-  let profileResult = evaluateHeightProfile(globals.profile.x, bezelProgress);
+  let profileResult = evaluateHeightProfile(globals.shape.w, bezelProgress);
   let profileHeight = profileResult.x * bezelWidth;
-  let flatHeight = evaluateHeightProfile(globals.profile.x, 1.0).x * bezelWidth;
+  let flatHeight = evaluateHeightProfile(globals.shape.w, 1.0).x * bezelWidth;
   let surfaceHeight = globals.glass.x + select(profileHeight, flatHeight, inwardDistance > bezelWidth);
   let surfaceDerivative = select(profileResult.y, 0.0, inwardDistance > bezelWidth);
   let clampedSlope = min(surfaceDerivative, tan(1.4835298));
@@ -353,7 +350,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     vec2f(0.0),
     fillMask <= 0.0,
   );
-  let contentBaseIor = max(globals.lighting.w, 1.0001);
+  let contentBaseIor = max(globals.content.x, 1.0001);
   let contentRefractedRayRed = refract(
     vec3f(0.0, 0.0, -1.0),
     surfaceNormal,
@@ -368,7 +365,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let contentDisplacementPxRed = select(
     contentRefractedRayRed.xy /
       max(-contentRefractedRayRed.z, 0.0001) *
-      globals.specularSecondary.z *
+      globals.content.y *
       globals.glass.y,
     vec2f(0.0),
     fillMask <= 0.0,
@@ -376,7 +373,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let contentDisplacementPxGreen = select(
     contentRefractedRayGreen.xy /
       max(-contentRefractedRayGreen.z, 0.0001) *
-      globals.specularSecondary.z *
+      globals.content.y *
       globals.glass.y,
     vec2f(0.0),
     fillMask <= 0.0,
@@ -384,7 +381,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let contentDisplacementPxBlue = select(
     contentRefractedRayBlue.xy /
       max(-contentRefractedRayBlue.z, 0.0001) *
-      globals.specularSecondary.z *
+      globals.content.y *
       globals.glass.y,
     vec2f(0.0),
     fillMask <= 0.0,
@@ -397,7 +394,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     sampleBackgroundBlurred(refractedUvGreen).g,
     sampleBackgroundBlurred(refractedUvBlue).b,
   );
-  let reflectedUv = in.uv + rimNormal * globals.specularSecondary.y / globals.canvas.xy;
+  let reflectedUv = in.uv + rimNormal * globals.specularSecondary.z / globals.canvas.xy;
   let reflectedColor = sampleBackgroundBlurred(reflectedUv);
   let glass = mix(refractedColor, globals.tint.rgb, globals.tint.a);
   let refractedLuma = dot(refractedColor, vec3f(0.2126, 0.7152, 0.0722));
@@ -419,7 +416,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     let contentStart = u32(shape.contentRange.x);
     let contentCount = u32(shape.contentRange.y);
     let shapeDistanceAtFrag = shapeDistance(shape, fragCoord);
-    let contentBand = max(globals.surface.x, pixelWidth);
+    let contentBand = max(globals.shape.x, pixelWidth);
     let contentMask = 1.0 - smoothstep(contentBand, contentBand + pixelWidth, shapeDistanceAtFrag);
     let glassLocalRed = shapeLocalPos(shape, fragCoord + contentDisplacementPxRed);
     let glassLocalGreen = shapeLocalPos(shape, fragCoord + contentDisplacementPxGreen);
@@ -439,18 +436,18 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
 
   // White specular is a separate rim-only highlight driven by 2D normal/light alignment and
   // then masked back to the configured rim band.
-  let primaryBandProgress = clamp(inwardDistance / max(globals.specularPrimary.y, pixelWidth), 0.0, 1.0);
+  let primaryBandProgress = clamp(inwardDistance / max(globals.specular.y, pixelWidth), 0.0, 1.0);
   let oppositeBandProgress = primaryBandProgress;
-  let primaryStrength = globals.specularPrimary.x - globals.lighting.z * primaryBandProgress * primaryBandProgress;
+  let primaryStrength = globals.specular.x - globals.specularSecondary.y * primaryBandProgress * primaryBandProgress;
   let oppositeStrength =
-    globals.specularSecondary.x - globals.lighting.z * oppositeBandProgress * oppositeBandProgress;
+    globals.specularSecondary.x - globals.specularSecondary.y * oppositeBandProgress * oppositeBandProgress;
   let oppositeRimBandMask = 1.0 - smoothstep(
-    globals.specularPrimary.y,
-    globals.specularPrimary.y + pixelWidth,
+    globals.specular.y,
+    globals.specular.y + pixelWidth,
     inwardDistance,
   );
-  let rimSpecular = pow(max(dot(rimNormal, lightDir), 0.0), globals.specularPrimary.z);
-  let mirroredRimSpecular = pow(max(dot(rimNormal, mirroredLightDir), 0.0), globals.specularPrimary.z);
+  let rimSpecular = pow(max(dot(rimNormal, lightDir), 0.0), globals.specular.z);
+  let mirroredRimSpecular = pow(max(dot(rimNormal, mirroredLightDir), 0.0), globals.specular.z);
   let primarySpecularOpacity = clamp(rimSpecular * primaryStrength, 0.0, 1.0);
   let oppositeSpecularOpacity = clamp(mirroredRimSpecular * oppositeStrength, 0.0, 1.0);
   let combinedRimSpecularOpacity = clamp(
@@ -458,7 +455,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     0.0,
     1.0,
   );
-  let whiteSpecularOpacity = combinedRimSpecularOpacity * globals.specularPrimary.w;
+  let whiteSpecularOpacity = combinedRimSpecularOpacity * globals.specular.w;
   let coloredEdgeOpacity = combinedRimSpecularOpacity;
   let whiteSpecular = vec3f(1.0) * whiteSpecularOpacity;
 
@@ -491,16 +488,16 @@ struct MetricsBounds {
 
 @fragment
 fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
-  let shapeCount = u32(globals.specularSecondary.w);
+  let shapeCount = u32(globals.shape.z);
   let positionPx = mix(metricsBounds.min, metricsBounds.max, in.uv);
   let insideCanvas =
     all(positionPx >= vec2f(0.0)) &&
     all(positionPx <= globals.canvas.xy);
-  let distance = sceneSdf(positionPx, shapeCount, globals.surface.x);
+  let distance = sceneSdf(positionPx, shapeCount, globals.shape.x);
   // This uses bezel width as the interior cutoff. For heavily fused shapes with
   // spacing wider than the bezel, the transition band can extend past this threshold,
   // but we accept that simplification for now because it does not occur in our target use cases.
-  let isInterior = insideCanvas && distance <= -globals.surface.w;
+  let isInterior = insideCanvas && distance <= -globals.shape.y;
   let color = textureSampleLevel(blurredBackdrop, metricsSampler, positionPx / globals.canvas.xy, 0.0).rgb;
   return vec4f(color, select(0.0, 1.0, isInterior));
 }
@@ -544,7 +541,6 @@ struct HtmlCompositeParams {
   canvas: vec4f,
   inverse0: vec4f,
   inverse1: vec4f,
-  size: vec4f,
 };
 
 @group(0) @binding(0) var compositeSampler: sampler;
@@ -580,13 +576,13 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     params.inverse0.x * fragCoord.x + params.inverse0.y * fragCoord.y + params.inverse0.z,
     params.inverse1.x * fragCoord.x + params.inverse1.y * fragCoord.y + params.inverse1.z,
   );
+  let copiedSize = vec2f(params.inverse0.w, params.inverse1.w);
 
   if (
-    any(params.size.xy <= vec2f(0.0)) ||
     any(params.canvas.zw <= vec2f(0.0)) ||
-    any(params.size.zw <= vec2f(0.0)) ||
+    any(copiedSize <= vec2f(0.0)) ||
     any(localPos < vec2f(0.0)) ||
-    any(localPos > params.size.zw)
+    any(localPos > copiedSize)
   ) {
     return sceneColor;
   }
