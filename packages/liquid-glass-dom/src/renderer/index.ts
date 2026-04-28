@@ -364,10 +364,7 @@ export class Renderer {
   private backdropMetricsPipeline: GPURenderPipeline | null = null
   private targets: RenderTargetSet | null = null
   private lastFrameTexture: GPUTexture | null = null
-  private lastFrameWidth = 0
-  private lastFrameHeight = 0
   private backdropMetricsTarget: GPUTexture | null = null
-  private emptyContentTexture: GPUTexture | null = null
   private glassContentAtlas: GPUTexture | null = null
   private glassContentAtlasWidth = 0
   private glassContentAtlasHeight = 0
@@ -533,16 +530,12 @@ export class Renderer {
     this.targets = null
     this.lastFrameTexture?.destroy()
     this.lastFrameTexture = null
-    this.lastFrameWidth = 0
-    this.lastFrameHeight = 0
     this.backdropMetricsTarget?.destroy()
     this.backdropMetricsTarget = null
     this.glassContentAtlas?.destroy()
     this.glassContentAtlas = null
     this.glassContentAtlasWidth = 0
     this.glassContentAtlasHeight = 0
-    this.emptyContentTexture?.destroy()
-    this.emptyContentTexture = null
     this.globalsBuffer?.destroy()
     this.shapesBuffer?.destroy()
     this.contentEntriesBuffer?.destroy()
@@ -712,26 +705,6 @@ export class Renderer {
       usage: GPU_TEXTURE_USAGE.RENDER_ATTACHMENT | GPU_TEXTURE_USAGE.COPY_SRC,
     })
 
-    const emptyContentTexture = device.createTexture({
-      size: {
-        width: 1,
-        height: 1,
-        depthOrArrayLayers: 1,
-      },
-      format: presentationFormat,
-      usage: GPU_TEXTURE_USAGE.TEXTURE_BINDING | GPU_TEXTURE_USAGE.COPY_DST,
-    })
-    device.queue.writeTexture(
-      { texture: emptyContentTexture },
-      new Uint8Array([0, 0, 0, 0]),
-      { bytesPerRow: 4 },
-      {
-        width: 1,
-        height: 1,
-        depthOrArrayLayers: 1,
-      },
-    )
-
     this.device = device
     this.context = context
     this.presentationFormat = presentationFormat
@@ -746,7 +719,6 @@ export class Renderer {
     this.htmlCompositePipeline = htmlCompositePipeline
     this.backdropMetricsPipeline = backdropMetricsPipeline
     this.backdropMetricsTarget = backdropMetricsTarget
-    this.emptyContentTexture = emptyContentTexture
     this.initialized = true
 
     for (const container of this.trackedBackdropContainers) {
@@ -781,8 +753,8 @@ export class Renderer {
       !this.targets
     ) {
       const previousLastFrame = this.lastFrameTexture
-      const previousLastFrameWidth = this.lastFrameWidth
-      const previousLastFrameHeight = this.lastFrameHeight
+      const previousLastFrameWidth = this.targetCanvas.width
+      const previousLastFrameHeight = this.targetCanvas.height
 
       this.targetCanvas.width = nextWidth
       this.targetCanvas.height = nextHeight
@@ -795,8 +767,6 @@ export class Renderer {
       }
 
       this.lastFrameTexture = createRenderTarget(this.device, this.presentationFormat, nextWidth, nextHeight)
-      this.lastFrameWidth = nextWidth
-      this.lastFrameHeight = nextHeight
 
       this.context.configure({
         device: this.device,
@@ -1600,8 +1570,8 @@ export class Renderer {
 
     if (layoutChanged || !this.glassContentAtlas) {
       const layout = packContentAtlas(activeEntries, this.device.limits.maxTextureDimension2D)
-      const nextAtlasWidth = Math.max(layout.width, 1)
-      const nextAtlasHeight = Math.max(layout.height, 1)
+      const nextAtlasWidth = layout.width
+      const nextAtlasHeight = layout.height
       const previousAtlasWidth = this.glassContentAtlasWidth
       const previousAtlasHeight = this.glassContentAtlasHeight
       const atlasLayoutChanged =
@@ -1609,12 +1579,8 @@ export class Renderer {
         nextAtlasWidth !== this.glassContentAtlasWidth ||
         nextAtlasHeight !== this.glassContentAtlasHeight ||
         activeEntries.some((entry) => {
-          const rect = layout.rects.get(entry.html)
-          return (
-            !rect ||
-            entry.atlasX !== rect.x ||
-            entry.atlasY !== rect.y
-          )
+          const rect = layout.rects.get(entry.html)!
+          return entry.atlasX !== rect.x || entry.atlasY !== rect.y
         })
 
       if (atlasLayoutChanged) {
@@ -1638,8 +1604,8 @@ export class Renderer {
 
           for (const entry of activeEntries) {
             const previousEntry = previousAtlasEntries.get(entry.html)
-            const rect = layout.rects.get(entry.html)
-            if (!previousEntry || !rect) {
+            const rect = layout.rects.get(entry.html)!
+            if (!previousEntry) {
               entry.copiedDeviceWidth = 0
               entry.copiedDeviceHeight = 0
               continue
@@ -1691,10 +1657,7 @@ export class Renderer {
       }
 
       for (const entry of activeEntries) {
-        const rect = layout.rects.get(entry.html)
-        if (!rect) {
-          continue
-        }
+        const rect = layout.rects.get(entry.html)!
 
         entry.atlasX = rect.x
         entry.atlasY = rect.y
@@ -2118,10 +2081,9 @@ export class Renderer {
       return
     }
 
-    const contentTexture = this.glassContentAtlas ?? this.emptyContentTexture
-    if (!contentTexture) {
-      return
-    }
+    // The shader never reads this when all content ranges are empty, but the
+    // bind group still needs a valid texture for the fixed glass pipeline layout.
+    const contentTexture = this.glassContentAtlas ?? sharpSource
 
     const bindGroup = this.device.createBindGroup({
       layout: this.glassPipeline.getBindGroupLayout(0),
@@ -2178,8 +2140,8 @@ export class Renderer {
       return
     }
 
-    const copyWidth = Math.min(previousWidth, this.lastFrameWidth)
-    const copyHeight = Math.min(previousHeight, this.lastFrameHeight)
+    const copyWidth = Math.min(previousWidth, this.targetCanvas.width)
+    const copyHeight = Math.min(previousHeight, this.targetCanvas.height)
     const encoder = this.device.createCommandEncoder()
 
     this.clearTexture(encoder, this.lastFrameTexture)
@@ -2361,17 +2323,15 @@ export class Renderer {
 
     this.copyTextureToPresentation(encoder, currentScene)
     if (
-      this.lastFrameTexture &&
-      this.lastFrameWidth === this.targetCanvas.width &&
-      this.lastFrameHeight === this.targetCanvas.height
+      this.lastFrameTexture
     ) {
       copyTextureRegion(encoder, currentScene, this.lastFrameTexture, {
         sourceX: 0,
         sourceY: 0,
         destinationX: 0,
         destinationY: 0,
-        width: this.lastFrameWidth,
-        height: this.lastFrameHeight,
+        width: this.targetCanvas.width,
+        height: this.targetCanvas.height,
       })
     }
     this.device.queue.submit([encoder.finish()])
