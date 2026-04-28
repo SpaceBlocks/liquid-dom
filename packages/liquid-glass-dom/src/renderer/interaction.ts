@@ -1,7 +1,7 @@
 import { composeTransform, invertMatrix, multiplyMatrices, transformPoint, type Matrix2D } from '../matrix'
 import { type Container, type Glass } from '../scene'
 
-type FlattenedContainer = {
+export type FlattenedContainer = {
   container: Container
   transform: Matrix2D
 }
