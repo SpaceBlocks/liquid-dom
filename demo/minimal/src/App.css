@@ -87,6 +87,46 @@
   gap: 18px;
 }
 
+.layout-demo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.layout-canvas-shell {
+  height: 560px;
+}
+
+.layout-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.layout-control {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.layout-control span {
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(243, 245, 247, 0.62);
+}
+
+.layout-control output {
+  color: rgba(243, 245, 247, 0.9);
+  font-variant-numeric: tabular-nums;
+}
+
+.layout-control input[type="range"] {
+  width: 100%;
+  accent-color: #96f1ca;
+}
+
 .tiny-canvas-shell {
   height: 500px;
 }
@@ -467,6 +507,195 @@
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
 }
 
+.layout-backdrop {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    linear-gradient(120deg, rgba(9, 28, 34, 0.92), rgba(8, 10, 16, 0.96)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 56px);
+}
+
+.layout-backdrop::before,
+.layout-backdrop::after {
+  position: absolute;
+  content: "";
+  border-radius: 999px;
+  filter: blur(18px);
+}
+
+.layout-backdrop::before {
+  top: 52px;
+  right: 78px;
+  width: 210px;
+  height: 210px;
+  background: rgba(91, 184, 198, 0.26);
+}
+
+.layout-backdrop::after {
+  bottom: 68px;
+  left: 92px;
+  width: 260px;
+  height: 260px;
+  background: rgba(150, 241, 202, 0.16);
+}
+
+.layout-backdrop-copy {
+  position: absolute;
+  left: 34px;
+  top: 32px;
+  z-index: 1;
+  width: min(420px, calc(100% - 68px));
+}
+
+.layout-backdrop-copy h1 {
+  margin: 0 0 10px;
+  max-width: 390px;
+  font-size: clamp(2.1rem, 4vw, 3.8rem);
+  line-height: 0.98;
+}
+
+.layout-backdrop-copy p {
+  max-width: 340px;
+  margin: 0;
+  color: rgba(243, 245, 247, 0.72);
+}
+
+.layout-chip {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 8px 14px;
+  border-radius: 16px;
+  color: #f4fffb;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.layout-chip span,
+.layout-overlay-badge span {
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 255, 251, 0.6);
+}
+
+.layout-chip strong {
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+  line-height: 1.05;
+}
+
+.layout-chip.metric {
+  justify-items: end;
+  text-align: right;
+}
+
+.layout-glass-card {
+  display: grid;
+  align-content: center;
+  gap: 9px;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  color: #f4fffb;
+  text-shadow: 0 1px 16px rgba(0, 0, 0, 0.28);
+}
+
+.layout-glass-card span {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(244, 255, 251, 0.62);
+}
+
+.layout-glass-card strong {
+  font-size: 1.22rem;
+  line-height: 1.12;
+}
+
+.layout-glass-card p {
+  margin: 0;
+  color: rgba(244, 255, 251, 0.76);
+}
+
+.layout-glass-card.compact {
+  padding: 20px;
+}
+
+.layout-glass-card.footer {
+  justify-items: center;
+  text-align: center;
+  padding: 18px 26px;
+}
+
+.layout-glass-card.floating {
+  justify-items: center;
+  text-align: center;
+  padding: 14px;
+}
+
+.layout-glass-card.floating strong {
+  font-size: 1rem;
+}
+
+.layout-overlay-badge {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  color: #062423;
+  background: rgba(150, 241, 202, 0.88);
+  box-shadow: 0 10px 28px rgba(3, 18, 22, 0.25);
+}
+
+.layout-overlay-badge strong {
+  font-size: 0.82rem;
+}
+
+.layout-underlay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.layout-underlay div {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(150, 241, 202, 0.16);
+}
+
+.layout-underlay div:nth-child(1) {
+  left: 12%;
+  top: 20%;
+  width: 92px;
+  height: 92px;
+}
+
+.layout-underlay div:nth-child(2) {
+  right: 10%;
+  top: 12%;
+  width: 64px;
+  height: 64px;
+  background: rgba(91, 184, 198, 0.18);
+}
+
+.layout-underlay div:nth-child(3) {
+  right: 18%;
+  bottom: 12%;
+  width: 118px;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .tiny-backdrop {
   position: relative;
   width: 100%;
@@ -604,6 +833,10 @@
 @media (max-width: 980px) {
   .demo-layout,
   .backdrop-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .layout-controls {
     grid-template-columns: 1fr;
   }
 

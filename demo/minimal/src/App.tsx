@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './App.css'
 import HtmlLayersDemo from './demos/HtmlLayersDemo'
+import LayoutSceneDemo from './demos/LayoutSceneDemo'
 import PointerEventsDemo from './demos/PointerEventsDemo'
 import TinyGlassDemo from './demos/TinyGlassDemo'
 import type { DemoTab } from './demos/shared'
@@ -22,6 +23,16 @@ export default function App() {
             >
               <span>Tiny glass</span>
               <small>HTML backdrop, HTML content, width slider</small>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeDemo === 'layout'}
+              className={activeDemo === 'layout' ? 'demo-tab active' : 'demo-tab'}
+              onClick={() => setActiveDemo('layout')}
+            >
+              <span>Layout scene</span>
+              <small>Retained layout tree driving glass scene nodes</small>
             </button>
             <button
               type="button"
@@ -49,6 +60,8 @@ export default function App() {
         <section className="demo-content">
           {activeDemo === 'tiny' ? (
             <TinyGlassDemo />
+          ) : activeDemo === 'layout' ? (
+            <LayoutSceneDemo />
           ) : activeDemo === 'pointer' ? (
             <PointerEventsDemo />
           ) : (
