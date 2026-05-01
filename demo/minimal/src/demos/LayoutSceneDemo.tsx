@@ -39,19 +39,20 @@ type LayoutRefs = {
 function fillHtml(element: HTMLElement) {
   return new Html({
     element,
-    measure: (proposal) => ({
-      width: proposal.width ?? 0,
-      height: proposal.height ?? 0,
-    }),
+    sizing: 'fill',
   })
 }
 
 function fixedHtml(width: number, height: number, className: string, html: string) {
-  return new Html({
-    width,
+  const frame = new Frame({
     height,
-    element: createElement(className, html),
+    width,
   })
+  frame.add(new Html({
+    element: createElement(className, html),
+    sizing: 'fill',
+  }))
+  return frame
 }
 
 function createElement(className: string, html: string) {
@@ -253,7 +254,7 @@ function buildLayoutScene(): LayoutRefs {
     `,
   )))
 
-  column.add(new Spacer({ minLength: 10 }))
+  // column.add(new Spacer({ minLength: 10 }))
 
   const footerFrame = column.add(new Frame({
     maxWidth: 'infinity',

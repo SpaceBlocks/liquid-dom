@@ -3,7 +3,6 @@ import {
   createLayoutEngine,
   frame as createFrame,
   hstack as createHStack,
-  leaf as createLeaf,
   noop as createNoop,
   overlay as createOverlay,
   padding as createPadding,
@@ -11,7 +10,12 @@ import {
   vstack as createVStack,
   zstack as createZStack,
 } from 'laymeout'
-import { domLeaf, type DomLeafSizing } from 'laymeout/dom'
+import {
+  domLeaf,
+  subscribeDomElement,
+  type DomLeafOptions,
+  type DomLeafSizing,
+} from 'laymeout/dom'
 import {
   Container as SceneContainer,
   Glass as SceneGlass,
@@ -31,8 +35,8 @@ import type {
   LayoutDebugStats,
   LayoutEngine,
   LayoutEngineOptions,
+  LayoutInvalidation,
   LayoutNode as LaymeoutNode,
-  LeafMeasure,
   LeafNode,
   LeafSubscribe,
   PaddingNode,
@@ -52,10 +56,6 @@ import type { Point, RgbaColor, SurfaceProfile, Transform as SceneTransform } fr
 type SceneNode = SceneContainer | SceneGlass | SceneGroup | SceneStackingContext | SceneHtml
 type SceneParent = GlassScene | SceneNode
 type UiParent = LayoutScene | UiNode
-type FixedMeasureState = {
-  width: number | undefined
-  height: number | undefined
-}
 
 /** Any node accepted by the retained layout UI tree. */
 export type LayoutUiNode =
@@ -78,6 +78,22 @@ export type LayoutSceneOptions = Omit<LayoutEngineOptions, 'root'> & {
   root?: LayoutUiNode
 }
 
+/** Kind of retained layout UI invalidation emitted by {@link LayoutScene}. */
+export type LayoutSceneInvalidationKind = 'layout' | 'frame'
+
+/** Invalidation emitted when retained layout UI nodes are mutated imperatively. */
+export type LayoutSceneInvalidation = {
+  /** Whether the mutation requires a layout pass or only a new frame. */
+  kind: LayoutSceneInvalidationKind
+  /** Optional source node for mutations that came from the retained UI tree. */
+  node?: LayoutUiNode
+  /** Optional low-level invalidation detail. */
+  cause?: unknown
+}
+
+/** Listener registered with {@link LayoutScene.addInvalidationListener}. */
+export type LayoutSceneInvalidationListener = (invalidation: LayoutSceneInvalidation) => void
+
 /** Constructor options for {@link GlassContainer}. */
 export type GlassContainerOptions = Omit<ContainerInit, keyof SceneTransform>
 
@@ -86,23 +102,11 @@ export type GlassOptions = Omit<GlassInit, keyof SceneTransform | 'width' | 'hei
 
 /** Constructor options for {@link Html}. */
 export type HtmlOptions = {
-  /** Intrinsic layout width used by the fixed-size leaf mode. */
-  width?: number
-  /** Intrinsic layout height used by the fixed-size leaf mode. */
-  height?: number
   /** Scene draw order among sibling scene or glass HTML nodes. */
   zIndex?: number
-  /** DOM element hosted by the scene HTML node. */
+  /** Measured content element rendered inside the layout-owned scene HTML host. */
   element?: HTMLElement | null
-  /** Custom layout measurement callback. */
-  measure?: LeafMeasure
-  /** Optional custom measurement subscription. */
-  subscribe?: LeafSubscribe
-  /** Custom measure cache key passed through to the leaf layout node. */
-  measureKey?: unknown
-  /** Custom subscription identity passed through to the leaf layout node. */
-  subscriptionKey?: unknown
-  /** DOM measurement mode used when `element` is provided without a fixed size or custom measure. */
+  /** DOM measurement mode used by the default DOM measurement path. */
   sizing?: DomLeafSizing
 }
 
@@ -120,6 +124,27 @@ function resetLayoutTransform(node: SceneTransform, rect: Rect) {
   node.scaleY = 1
   node.rotation = 0
   node.origin = { x: 0, y: 0 }
+}
+
+function syncOwnedHtmlElementSizing(element: HTMLElement, sizing: DomLeafSizing) {
+  if (sizing === 'fill') {
+    element.style.display = 'block'
+    element.style.width = '100%'
+    element.style.height = '100%'
+    element.style.boxSizing = 'border-box'
+    return
+  }
+
+  element.style.display = ''
+  element.style.width = ''
+  element.style.height = ''
+  element.style.boxSizing = ''
+}
+
+function setProperty<T extends object, K extends keyof T>(target: T, key: K, value: T[K]): boolean {
+  const previous = target[key]
+  target[key] = value
+  return !Object.is(target[key], previous)
 }
 
 function attachSceneChild(parent: SceneParent, child: SceneNode) {
@@ -158,42 +183,6 @@ function assertNoUiCycle(parent: UiNode, child: UiNode) {
     }
     current = current._parent
   }
-}
-
-function makeFixedMeasure(state: FixedMeasureState): LeafMeasure {
-  return (proposal) => ({
-    width: state.width ?? proposal.width ?? 0,
-    height: state.height ?? proposal.height ?? 0,
-  })
-}
-
-function createHtmlLayoutNode(options: HtmlOptions, fixedMeasure: { current: FixedMeasureState | null }) {
-  if (options.measure) {
-    return createLeaf({
-      measure: options.measure,
-      subscribe: options.subscribe,
-      measureKey: options.measureKey,
-      subscriptionKey: options.subscriptionKey,
-    })
-  }
-
-  if (options.element && options.width === undefined && options.height === undefined) {
-    return domLeaf({
-      element: options.element,
-      sizing: options.sizing,
-      measureKey: options.measureKey,
-    })
-  }
-
-  fixedMeasure.current = {
-    width: options.width,
-    height: options.height,
-  }
-
-  return createLeaf({
-    measure: makeFixedMeasure(fixedMeasure.current),
-    measureKey: options.measureKey,
-  })
 }
 
 /**
@@ -241,6 +230,7 @@ abstract class UiNode<
     child.layoutNode.remove()
     child.sceneNode?.remove()
     child._parent = null
+    this.invalidateLayout('children')
   }
 
   _applyLayoutTree() {
@@ -267,7 +257,28 @@ abstract class UiNode<
     child._parent = this
     this.layoutNode.append(child.layoutNode)
     this.attachChildScene(child)
+    this.invalidateLayout('children')
     return child
+  }
+
+  _emitInvalidation(invalidation: LayoutSceneInvalidation) {
+    this._parent?._emitInvalidation(invalidation)
+  }
+
+  protected invalidateLayout(cause?: unknown) {
+    this._emitInvalidation({
+      kind: 'layout',
+      node: this as unknown as LayoutUiNode,
+      cause,
+    })
+  }
+
+  protected invalidateFrame(cause?: unknown) {
+    this._emitInvalidation({
+      kind: 'frame',
+      node: this as unknown as LayoutUiNode,
+      cause,
+    })
   }
 
   protected assertCanAddChild(_child: LayoutUiNode) {
@@ -317,10 +328,17 @@ export class LayoutScene {
   readonly engine: LayoutEngine
 
   private _root: LayoutUiNode | null = null
+  private readonly invalidationListeners = new Set<LayoutSceneInvalidationListener>()
 
   constructor(options: LayoutSceneOptions = {}) {
-    const { root, ...engineOptions } = options
-    this.engine = createLayoutEngine(engineOptions)
+    const { root, onInvalidate, ...engineOptions } = options
+    this.engine = createLayoutEngine({
+      ...engineOptions,
+      onInvalidate: (invalidation: LayoutInvalidation) => {
+        onInvalidate?.(invalidation)
+        this._emitInvalidation({ kind: 'layout', cause: invalidation })
+      },
+    })
     if (root) {
       this.add(root)
     }
@@ -329,6 +347,14 @@ export class LayoutScene {
   /** Current root UI node, if one is attached. */
   get root(): LayoutUiNode | null {
     return this._root
+  }
+
+  /** Adds a listener for retained UI mutations that require layout or rendering work. */
+  addInvalidationListener(listener: LayoutSceneInvalidationListener): () => void {
+    this.invalidationListeners.add(listener)
+    return () => {
+      this.invalidationListeners.delete(listener)
+    }
   }
 
   /** Adds the root UI node, replacing no existing root. */
@@ -347,6 +373,7 @@ export class LayoutScene {
     if (child.sceneNode) {
       attachSceneChild(this.scene, child.sceneNode)
     }
+    this._emitInvalidation({ kind: 'layout', node: child, cause: 'root' })
     return child
   }
 
@@ -380,6 +407,13 @@ export class LayoutScene {
     child._parent = null
     this._root = null
     this.engine.root = undefined
+    this._emitInvalidation({ kind: 'layout', node: child, cause: 'root' })
+  }
+
+  _emitInvalidation(invalidation: LayoutSceneInvalidation) {
+    for (const listener of this.invalidationListeners) {
+      listener(invalidation)
+    }
   }
 }
 
@@ -396,7 +430,9 @@ export class HStack extends UiNode<StackNode, SceneGroup> {
   }
 
   set spacing(value: number) {
-    this.layoutNode.spacing = value
+    if (setProperty(this.layoutNode, 'spacing', value)) {
+      this.invalidateLayout('spacing')
+    }
   }
 
   get alignment(): StackAlignment {
@@ -404,7 +440,9 @@ export class HStack extends UiNode<StackNode, SceneGroup> {
   }
 
   set alignment(value: StackAlignment) {
-    this.layoutNode.alignment = value
+    if (setProperty(this.layoutNode, 'alignment', value)) {
+      this.invalidateLayout('alignment')
+    }
   }
 }
 
@@ -421,7 +459,9 @@ export class VStack extends UiNode<StackNode, SceneGroup> {
   }
 
   set spacing(value: number) {
-    this.layoutNode.spacing = value
+    if (setProperty(this.layoutNode, 'spacing', value)) {
+      this.invalidateLayout('spacing')
+    }
   }
 
   get alignment(): StackAlignment {
@@ -429,7 +469,9 @@ export class VStack extends UiNode<StackNode, SceneGroup> {
   }
 
   set alignment(value: StackAlignment) {
-    this.layoutNode.alignment = value
+    if (setProperty(this.layoutNode, 'alignment', value)) {
+      this.invalidateLayout('alignment')
+    }
   }
 }
 
@@ -448,7 +490,9 @@ export class ZStack extends UiNode<ZStackNode, SceneStackingContext> {
   }
 
   set alignment(value: Alignment) {
-    this.layoutNode.alignment = value
+    if (setProperty(this.layoutNode, 'alignment', value)) {
+      this.invalidateLayout('alignment')
+    }
   }
 
   override _detachChild(child: LayoutUiNode) {
@@ -499,7 +543,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set width(value: number | undefined) {
-    this.layoutNode.width = value
+    if (setProperty(this.layoutNode, 'width', value)) {
+      this.invalidateLayout('width')
+    }
   }
 
   get height(): number | undefined {
@@ -507,7 +553,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set height(value: number | undefined) {
-    this.layoutNode.height = value
+    if (setProperty(this.layoutNode, 'height', value)) {
+      this.invalidateLayout('height')
+    }
   }
 
   get minWidth(): number | undefined {
@@ -515,7 +563,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set minWidth(value: number | undefined) {
-    this.layoutNode.minWidth = value
+    if (setProperty(this.layoutNode, 'minWidth', value)) {
+      this.invalidateLayout('minWidth')
+    }
   }
 
   get minHeight(): number | undefined {
@@ -523,7 +573,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set minHeight(value: number | undefined) {
-    this.layoutNode.minHeight = value
+    if (setProperty(this.layoutNode, 'minHeight', value)) {
+      this.invalidateLayout('minHeight')
+    }
   }
 
   get idealWidth(): number | undefined {
@@ -531,7 +583,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set idealWidth(value: number | undefined) {
-    this.layoutNode.idealWidth = value
+    if (setProperty(this.layoutNode, 'idealWidth', value)) {
+      this.invalidateLayout('idealWidth')
+    }
   }
 
   get idealHeight(): number | undefined {
@@ -539,7 +593,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set idealHeight(value: number | undefined) {
-    this.layoutNode.idealHeight = value
+    if (setProperty(this.layoutNode, 'idealHeight', value)) {
+      this.invalidateLayout('idealHeight')
+    }
   }
 
   get maxWidth(): FrameNode['maxWidth'] {
@@ -547,7 +603,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set maxWidth(value: FrameNode['maxWidth']) {
-    this.layoutNode.maxWidth = value
+    if (setProperty(this.layoutNode, 'maxWidth', value)) {
+      this.invalidateLayout('maxWidth')
+    }
   }
 
   get maxHeight(): FrameNode['maxHeight'] {
@@ -555,7 +613,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set maxHeight(value: FrameNode['maxHeight']) {
-    this.layoutNode.maxHeight = value
+    if (setProperty(this.layoutNode, 'maxHeight', value)) {
+      this.invalidateLayout('maxHeight')
+    }
   }
 
   get alignment(): Alignment {
@@ -563,7 +623,9 @@ export class Frame extends SingleChildUiNode<FrameNode, SceneGroup> {
   }
 
   set alignment(value: Alignment) {
-    this.layoutNode.alignment = value
+    if (setProperty(this.layoutNode, 'alignment', value)) {
+      this.invalidateLayout('alignment')
+    }
   }
 }
 
@@ -580,7 +642,9 @@ export class Padding extends SingleChildUiNode<PaddingNode, SceneGroup> {
   }
 
   set insets(value: InsetsInput) {
-    this.layoutNode.insets = value
+    if (setProperty(this.layoutNode, 'insets', value)) {
+      this.invalidateLayout('insets')
+    }
   }
 }
 
@@ -630,7 +694,9 @@ abstract class DecorationUiNode extends UiNode<LaymeoutNode, SceneStackingContex
   }
 
   set alignment(value: Alignment) {
-    ;(this.layoutNode as unknown as { alignment: Alignment }).alignment = value
+    if (setProperty(this.layoutNode as unknown as { alignment: Alignment }, 'alignment', value)) {
+      this.invalidateLayout('alignment')
+    }
   }
 
   override _detachChild(child: LayoutUiNode) {
@@ -649,6 +715,7 @@ abstract class DecorationUiNode extends UiNode<LaymeoutNode, SceneStackingContex
     child.sceneNode?.remove()
     child._parent = null
     this.syncLayoutSlots()
+    this.invalidateLayout('children')
   }
 
   private replaceSlot(slot: 'content' | 'decoration', child: LayoutUiNode) {
@@ -673,6 +740,7 @@ abstract class DecorationUiNode extends UiNode<LaymeoutNode, SceneStackingContex
     child._parent = this
     this.syncLayoutSlots()
     this.syncSceneSlots()
+    this.invalidateLayout('children')
   }
 
   private syncLayoutSlots() {
@@ -748,8 +816,13 @@ export class Transform extends SingleChildUiNode<LaymeoutNode, SceneGroup> {
   }
 
   set x(value: number) {
+    if (Object.is(this._x, value)) {
+      return
+    }
+
     this._x = value
     this.syncSceneTransform()
+    this.invalidateFrame('x')
   }
 
   get y(): number {
@@ -757,8 +830,13 @@ export class Transform extends SingleChildUiNode<LaymeoutNode, SceneGroup> {
   }
 
   set y(value: number) {
+    if (Object.is(this._y, value)) {
+      return
+    }
+
     this._y = value
     this.syncSceneTransform()
+    this.invalidateFrame('y')
   }
 
   get scaleX(): number {
@@ -766,8 +844,13 @@ export class Transform extends SingleChildUiNode<LaymeoutNode, SceneGroup> {
   }
 
   set scaleX(value: number) {
+    if (Object.is(this._scaleX, value)) {
+      return
+    }
+
     this._scaleX = value
     this.syncSceneTransform()
+    this.invalidateFrame('scaleX')
   }
 
   get scaleY(): number {
@@ -775,8 +858,13 @@ export class Transform extends SingleChildUiNode<LaymeoutNode, SceneGroup> {
   }
 
   set scaleY(value: number) {
+    if (Object.is(this._scaleY, value)) {
+      return
+    }
+
     this._scaleY = value
     this.syncSceneTransform()
+    this.invalidateFrame('scaleY')
   }
 
   get rotation(): number {
@@ -784,8 +872,13 @@ export class Transform extends SingleChildUiNode<LaymeoutNode, SceneGroup> {
   }
 
   set rotation(value: number) {
+    if (Object.is(this._rotation, value)) {
+      return
+    }
+
     this._rotation = value
     this.syncSceneTransform()
+    this.invalidateFrame('rotation')
   }
 
   get origin(): Point {
@@ -793,8 +886,13 @@ export class Transform extends SingleChildUiNode<LaymeoutNode, SceneGroup> {
   }
 
   set origin(value: Point) {
+    if (this._origin.x === value.x && this._origin.y === value.y) {
+      return
+    }
+
     this._origin = clonePoint(value)
     this.syncSceneTransform()
+    this.invalidateFrame('origin')
   }
 
   protected override applyLayoutRect(rect: Rect) {
@@ -826,7 +924,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set spacing(value: number) {
-    this.sceneNode.spacing = value
+    if (setProperty(this.sceneNode, 'spacing', value)) {
+      this.invalidateFrame('spacing')
+    }
   }
 
   get blur(): number {
@@ -834,7 +934,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set blur(value: number) {
-    this.sceneNode.blur = value
+    if (setProperty(this.sceneNode, 'blur', value)) {
+      this.invalidateFrame('blur')
+    }
   }
 
   get bezelWidth(): number {
@@ -842,7 +944,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set bezelWidth(value: number) {
-    this.sceneNode.bezelWidth = value
+    if (setProperty(this.sceneNode, 'bezelWidth', value)) {
+      this.invalidateFrame('bezelWidth')
+    }
   }
 
   get thickness(): number {
@@ -850,7 +954,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set thickness(value: number) {
-    this.sceneNode.thickness = value
+    if (setProperty(this.sceneNode, 'thickness', value)) {
+      this.invalidateFrame('thickness')
+    }
   }
 
   get displacementFactor(): number {
@@ -858,7 +964,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set displacementFactor(value: number) {
-    this.sceneNode.displacementFactor = value
+    if (setProperty(this.sceneNode, 'displacementFactor', value)) {
+      this.invalidateFrame('displacementFactor')
+    }
   }
 
   get ior(): number {
@@ -866,7 +974,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set ior(value: number) {
-    this.sceneNode.ior = value
+    if (setProperty(this.sceneNode, 'ior', value)) {
+      this.invalidateFrame('ior')
+    }
   }
 
   get contentIor(): number {
@@ -874,7 +984,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set contentIor(value: number) {
-    this.sceneNode.contentIor = value
+    if (setProperty(this.sceneNode, 'contentIor', value)) {
+      this.invalidateFrame('contentIor')
+    }
   }
 
   get contentDepth(): number {
@@ -882,7 +994,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set contentDepth(value: number) {
-    this.sceneNode.contentDepth = value
+    if (setProperty(this.sceneNode, 'contentDepth', value)) {
+      this.invalidateFrame('contentDepth')
+    }
   }
 
   get dispersion(): number {
@@ -890,7 +1004,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set dispersion(value: number) {
-    this.sceneNode.dispersion = value
+    if (setProperty(this.sceneNode, 'dispersion', value)) {
+      this.invalidateFrame('dispersion')
+    }
   }
 
   get surfaceProfile(): SurfaceProfile {
@@ -898,7 +1014,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set surfaceProfile(value: SurfaceProfile) {
-    this.sceneNode.surfaceProfile = value
+    if (setProperty(this.sceneNode, 'surfaceProfile', value)) {
+      this.invalidateFrame('surfaceProfile')
+    }
   }
 
   get lightDirection(): number {
@@ -906,7 +1024,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set lightDirection(value: number) {
-    this.sceneNode.lightDirection = value
+    if (setProperty(this.sceneNode, 'lightDirection', value)) {
+      this.invalidateFrame('lightDirection')
+    }
   }
 
   get specularStrength(): number {
@@ -914,7 +1034,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set specularStrength(value: number) {
-    this.sceneNode.specularStrength = value
+    if (setProperty(this.sceneNode, 'specularStrength', value)) {
+      this.invalidateFrame('specularStrength')
+    }
   }
 
   get specularWidth(): number {
@@ -922,7 +1044,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set specularWidth(value: number) {
-    this.sceneNode.specularWidth = value
+    if (setProperty(this.sceneNode, 'specularWidth', value)) {
+      this.invalidateFrame('specularWidth')
+    }
   }
 
   get specularFalloff(): number {
@@ -930,7 +1054,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set specularFalloff(value: number) {
-    this.sceneNode.specularFalloff = value
+    if (setProperty(this.sceneNode, 'specularFalloff', value)) {
+      this.invalidateFrame('specularFalloff')
+    }
   }
 
   get oppositeSpecularStrength(): number {
@@ -938,7 +1064,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set oppositeSpecularStrength(value: number) {
-    this.sceneNode.oppositeSpecularStrength = value
+    if (setProperty(this.sceneNode, 'oppositeSpecularStrength', value)) {
+      this.invalidateFrame('oppositeSpecularStrength')
+    }
   }
 
   get specularSharpness(): number {
@@ -946,7 +1074,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set specularSharpness(value: number) {
-    this.sceneNode.specularSharpness = value
+    if (setProperty(this.sceneNode, 'specularSharpness', value)) {
+      this.invalidateFrame('specularSharpness')
+    }
   }
 
   get specularOpacity(): number {
@@ -954,7 +1084,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set specularOpacity(value: number) {
-    this.sceneNode.specularOpacity = value
+    if (setProperty(this.sceneNode, 'specularOpacity', value)) {
+      this.invalidateFrame('specularOpacity')
+    }
   }
 
   get reflectionOffset(): number {
@@ -962,7 +1094,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set reflectionOffset(value: number) {
-    this.sceneNode.reflectionOffset = value
+    if (setProperty(this.sceneNode, 'reflectionOffset', value)) {
+      this.invalidateFrame('reflectionOffset')
+    }
   }
 
   get tint(): RgbaColor {
@@ -970,7 +1104,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set tint(value: RgbaColor) {
-    this.sceneNode.tint = value
+    if (setProperty(this.sceneNode, 'tint', value)) {
+      this.invalidateFrame('tint')
+    }
   }
 
   get zIndex(): number {
@@ -978,7 +1114,9 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
   }
 
   set zIndex(value: number) {
-    this.sceneNode.zIndex = value
+    if (setProperty(this.sceneNode, 'zIndex', value)) {
+      this.invalidateFrame('zIndex')
+    }
   }
 }
 
@@ -995,7 +1133,9 @@ export class Glass extends SingleChildUiNode<LaymeoutNode, SceneGlass> {
   }
 
   set cornerRadius(value: number) {
-    this.sceneNode.cornerRadius = value
+    if (setProperty(this.sceneNode, 'cornerRadius', value)) {
+      this.invalidateFrame('cornerRadius')
+    }
   }
 
   get cornerTransitionSpeed(): number {
@@ -1003,7 +1143,9 @@ export class Glass extends SingleChildUiNode<LaymeoutNode, SceneGlass> {
   }
 
   set cornerTransitionSpeed(value: number) {
-    this.sceneNode.cornerTransitionSpeed = value
+    if (setProperty(this.sceneNode, 'cornerTransitionSpeed', value)) {
+      this.invalidateFrame('cornerTransitionSpeed')
+    }
   }
 
   get pointerEvents(): boolean {
@@ -1011,7 +1153,9 @@ export class Glass extends SingleChildUiNode<LaymeoutNode, SceneGlass> {
   }
 
   set pointerEvents(value: boolean) {
-    this.sceneNode.pointerEvents = value
+    if (setProperty(this.sceneNode, 'pointerEvents', value)) {
+      this.invalidateFrame('pointerEvents')
+    }
   }
 
   get zIndex(): number {
@@ -1019,7 +1163,9 @@ export class Glass extends SingleChildUiNode<LaymeoutNode, SceneGlass> {
   }
 
   set zIndex(value: number) {
-    this.sceneNode.zIndex = value
+    if (setProperty(this.sceneNode, 'zIndex', value)) {
+      this.invalidateFrame('zIndex')
+    }
   }
 
   protected override applyLayoutRect(rect: Rect) {
@@ -1033,40 +1179,52 @@ export class Glass extends SingleChildUiNode<LaymeoutNode, SceneGlass> {
  * DOM-backed HTML view backed by a measured layout leaf and scene {@link SceneHtml}.
  */
 export class Html extends UiNode<LeafNode, SceneHtml> {
-  private fixedMeasure: FixedMeasureState | null
+  private readonly defaultMeasureOptions: DomLeafOptions
+  private readonly ownedElement: HTMLElement
+  private defaultSubscribe: LeafSubscribe
 
   constructor(options: HtmlOptions = {}) {
-    const fixedMeasure = { current: null as FixedMeasureState | null }
-    const layoutNode = createHtmlLayoutNode(options, fixedMeasure)
-    super(layoutNode, new SceneHtml({
+    const ownedElement = document.createElement('div')
+    const contentElement = options.element ?? ownedElement
+    const sizing = options.sizing ?? 'constrained-width'
+    syncOwnedHtmlElementSizing(ownedElement, sizing)
+    const sceneNode = new SceneHtml({
       zIndex: options.zIndex,
-      element: options.element,
-      width: options.width,
-      height: options.height,
-    }))
-    this.fixedMeasure = fixedMeasure.current
+      element: contentElement,
+    })
+    const defaultMeasureOptions: DomLeafOptions = {
+      element: contentElement,
+      sizing,
+    }
+    const defaultSubscribe: LeafSubscribe = (notify) =>
+      subscribeDomElement(defaultMeasureOptions.element, notify)
+    const layoutNode = domLeaf(defaultMeasureOptions)
+
+    super(layoutNode, sceneNode)
+    this.defaultMeasureOptions = defaultMeasureOptions
+    this.defaultSubscribe = defaultSubscribe
+    this.ownedElement = ownedElement
   }
 
   override add<T extends LayoutUiNode>(_child: T): T {
     throw new Error('Html is a leaf node and cannot accept children.')
   }
 
-  get width(): number | undefined {
-    return this.fixedMeasure?.width
+  /** DOM measurement sizing mode. */
+  get sizing(): DomLeafSizing {
+    return this.defaultMeasureOptions.sizing ?? 'constrained-width'
   }
 
-  set width(value: number | undefined) {
-    this.ensureFixedMeasure().width = value
-    this.layoutNode.invalidateMeasure('width')
-  }
+  set sizing(value: DomLeafSizing | undefined) {
+    const nextSizing = value ?? 'constrained-width'
+    if (this.defaultMeasureOptions.sizing === nextSizing) {
+      return
+    }
 
-  get height(): number | undefined {
-    return this.fixedMeasure?.height
-  }
-
-  set height(value: number | undefined) {
-    this.ensureFixedMeasure().height = value
-    this.layoutNode.invalidateMeasure('height')
+    this.defaultMeasureOptions.sizing = nextSizing
+    syncOwnedHtmlElementSizing(this.ownedElement, nextSizing)
+    this.layoutNode.invalidateMeasure('sizing')
+    this.invalidateLayout('sizing')
   }
 
   get zIndex(): number {
@@ -1074,7 +1232,9 @@ export class Html extends UiNode<LeafNode, SceneHtml> {
   }
 
   set zIndex(value: number) {
-    this.sceneNode.zIndex = value
+    if (setProperty(this.sceneNode, 'zIndex', value)) {
+      this.invalidateFrame('zIndex')
+    }
   }
 
   get element(): HTMLElement | null {
@@ -1085,10 +1245,22 @@ export class Html extends UiNode<LeafNode, SceneHtml> {
     this.setElement(value)
   }
 
-  /** Replaces the hosted DOM element. */
+  /** Replaces the measured content element inside the layout-owned scene host. */
   setElement(element: HTMLElement | null) {
-    this.sceneNode.setElement(element)
+    const contentElement = element ?? this.ownedElement
+    if (this.defaultMeasureOptions.element === contentElement) {
+      return
+    }
+
+    this.sceneNode.setElement(contentElement)
+    if (contentElement === this.ownedElement) {
+      syncOwnedHtmlElementSizing(this.ownedElement, this.sizing)
+    }
+    this.defaultMeasureOptions.element = contentElement
+    this.defaultSubscribe = (notify) => subscribeDomElement(contentElement, notify)
+    this.layoutNode.subscribe = this.defaultSubscribe
     this.layoutNode.invalidateMeasure('element')
+    this.invalidateLayout('element')
   }
 
   protected override applyLayoutRect(rect: Rect) {
@@ -1097,17 +1269,6 @@ export class Html extends UiNode<LeafNode, SceneHtml> {
     this.sceneNode.height = rect.height
   }
 
-  private ensureFixedMeasure(): FixedMeasureState {
-    if (!this.fixedMeasure) {
-      this.fixedMeasure = {
-        width: undefined,
-        height: undefined,
-      }
-      this.layoutNode.measure = makeFixedMeasure(this.fixedMeasure)
-    }
-
-    return this.fixedMeasure
-  }
 }
 
 /**
@@ -1127,6 +1288,8 @@ export class Spacer extends UiNode<SpacerNode, null> {
   }
 
   set minLength(value: number) {
-    this.layoutNode.minLength = value
+    if (setProperty(this.layoutNode, 'minLength', value)) {
+      this.invalidateLayout('minLength')
+    }
   }
 }

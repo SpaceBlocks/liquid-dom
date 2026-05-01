@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLayoutEngine, frame, hstack } from '../src/index'
-import { domLeaf } from '../src/dom'
+import { domLeaf, measureDomElement } from '../src/dom'
 
 type ResizeObserverCallbackLike = (entries?: ResizeObserverEntry[]) => void
 
@@ -85,10 +85,10 @@ describe('dom adapter', () => {
     expect(engine.getDebugStats().activeSubscriptions).toBe(1)
   })
 
-  it('supports proposal-width measurement', () => {
+  it('supports constrained-width measurement', () => {
     const element = document.createElement('div')
     document.body.append(element)
-    const node = domLeaf({ element, sizing: 'proposal-width' })
+    const node = domLeaf({ element, sizing: 'constrained-width' })
     const root = frame(node, { width: 50 })
     const engine = createLayoutEngine({ root })
 
@@ -98,11 +98,44 @@ describe('dom adapter', () => {
     expect(element.style.width).toBe('')
   })
 
-  it('remeasures proposal-width leaves when text content shrinks', () => {
+  it('supports fill measurement for proposed axes', () => {
     const element = document.createElement('div')
     element.textContent = 'long text'
     document.body.append(element)
-    const node = domLeaf({ element, sizing: 'proposal-width' })
+    const node = domLeaf({ element, sizing: 'fill' })
+    const root = frame(node, { width: 50, height: 70 })
+    const engine = createLayoutEngine({ root })
+
+    engine.layout({})
+
+    expect(node.layout?.rect).toEqual({ x: 0, y: 0, width: 50, height: 70 })
+  })
+
+  it('preserves stylesheet-authored widths when measuring replacement elements', () => {
+    const element = document.createElement('div')
+    element.className = 'replacement-card'
+    element.innerHTML = '<strong>Replacement target</strong><p>Wrapped content</p>'
+
+    const size = measureDomElement(element)
+
+    expect(size).toEqual({ width: 180, height: 95 })
+  })
+
+  it('preserves stylesheet-authored widths for unconstrained constrained-width measurement', () => {
+    const element = document.createElement('div')
+    element.className = 'replacement-card'
+    element.innerHTML = '<strong>Replacement target</strong><p>Wrapped content</p>'
+
+    const size = measureDomElement(element, {}, { sizing: 'constrained-width' })
+
+    expect(size).toEqual({ width: 180, height: 95 })
+  })
+
+  it('remeasures constrained-width leaves when text content shrinks', () => {
+    const element = document.createElement('div')
+    element.textContent = 'long text'
+    document.body.append(element)
+    const node = domLeaf({ element, sizing: 'constrained-width' })
     const root = frame(node, { width: 50 })
     const engine = createLayoutEngine({ root })
 
@@ -136,6 +169,18 @@ function elementWithSize(width: number, height: number) {
 }
 
 function mockCloneIntrinsicSizes() {
+  Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+    configurable: true,
+    writable: true,
+    value() {
+      const element = this as HTMLElement
+      if (element.classList.contains('replacement-card')) {
+        const maxContent = element.style.width === 'max-content'
+        return rect(maxContent ? 360 : 180, maxContent ? 44 : 95)
+      }
+      return rect(0, 0)
+    },
+  })
   Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
     configurable: true,
     get() {
@@ -149,9 +194,27 @@ function mockCloneIntrinsicSizes() {
   Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
     configurable: true,
     get() {
-      return Number.parseFloat((this as HTMLElement).style.width) || 0
+      const element = this as HTMLElement
+      if (element.style.width === 'max-content') {
+        return element.textContent === 'wide' ? 96 : 0
+      }
+      return Number.parseFloat(element.style.width) || 0
     },
   })
+}
+
+function rect(width: number, height: number): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: width,
+    bottom: height,
+    width,
+    height,
+    toJSON: () => null,
+  } as DOMRect
 }
 
 function resizeEntry(width: number, height: number): ResizeObserverEntry {

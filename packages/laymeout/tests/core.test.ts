@@ -373,6 +373,29 @@ describe('retained mutation and caching', () => {
     expect(onInvalidate).toHaveBeenCalledWith({ id: child.id, node: child, cause: 'resize' })
   })
 
+  it('resubscribes when the subscribe function changes', () => {
+    const firstCleanup = vi.fn()
+    const secondCleanup = vi.fn()
+    const firstSubscribe = vi.fn(() => firstCleanup)
+    const secondSubscribe = vi.fn(() => secondCleanup)
+    const child = leaf({
+      measure: () => ({ width: 1, height: 1 }),
+      subscribe: firstSubscribe,
+    })
+    const engine = createLayoutEngine({ root: child })
+
+    engine.layout({})
+    expect(firstSubscribe).toHaveBeenCalledTimes(1)
+
+    child.subscribe = secondSubscribe
+
+    expect(firstCleanup).toHaveBeenCalledTimes(1)
+    expect(secondSubscribe).toHaveBeenCalledTimes(1)
+
+    engine.dispose()
+    expect(secondCleanup).toHaveBeenCalledTimes(1)
+  })
+
   it('caps measurement cache growth for highly variable layouts', () => {
     const engine = createLayoutEngine({ root: box({ width: 10, height: 10 }), maxCachedMeasurements: 4 })
 

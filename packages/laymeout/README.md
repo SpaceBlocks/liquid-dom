@@ -169,7 +169,6 @@ const title = leaf({
     return unsubscribe
   },
   measureKey: model.version,
-  subscriptionKey: model,
 })
 
 title.invalidateMeasure('manual')
@@ -180,7 +179,6 @@ type LeafSpec = {
   measure: (proposal: ProposedSize, node: LeafNode) => Size
   subscribe?: (notify: (cause?: unknown) => void, node: LeafNode) => void | (() => void)
   measureKey?: unknown
-  subscriptionKey?: unknown
 }
 ```
 
@@ -295,19 +293,19 @@ import { domLeaf } from 'laymeout/dom'
 `domLeaf` creates a retained measured leaf from an existing `HTMLElement`.
 
 ```ts
-const titleNode = domLeaf({ element: titleEl, sizing: 'proposal-width' })
+const titleNode = domLeaf({ element: titleEl, sizing: 'constrained-width' })
 const actionNode = domLeaf({ element: buttonEl })
 ```
 
 ```ts
 type DomLeafOptions = {
   element: HTMLElement
-  sizing?: 'border-box' | 'proposal-width'
+  sizing?: 'intrinsic' | 'constrained-width' | 'fill'
   measureKey?: unknown
 }
 ```
 
-Measurement uses an offscreen clone so the live element is not mutated during the measure phase. `proposal-width` fixes the clone's width to the proposed width and lets height resolve naturally, which is useful for text wrapping.
+Measurement uses an offscreen clone so the live element is not mutated during the measure phase. `intrinsic` preserves the element's authored size. `constrained-width` accepts the proposed width and lets height resolve naturally, which is useful for text wrapping; if no width is proposed, it preserves authored width. `fill` accepts proposed width and height when either axis is available, falling back to intrinsic measurement for missing axes.
 
 The DOM adapter subscribes with `ResizeObserver`, image load/error events, `document.fonts` where available, and DOM mutations that commonly affect intrinsic size. It only invalidates measurement; applying `node.layout` to elements is up to your renderer.
 

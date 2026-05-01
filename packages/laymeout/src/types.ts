@@ -118,7 +118,6 @@ export type LeafNode = LayoutNode & {
   measure: LeafMeasure
   subscribe: LeafSubscribe | undefined
   measureKey: unknown
-  subscriptionKey: unknown
   invalidateMeasure: (cause?: unknown) => void
 }
 

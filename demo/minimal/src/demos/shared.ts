@@ -1,6 +1,6 @@
 import type { GlassPointerEvent } from 'liquid-glass-dom'
 
-export type DemoTab = 'tiny' | 'layout' | 'pointer' | 'html'
+export type DemoTab = 'tiny' | 'layout-simple' | 'dom-measurement' | 'layout' | 'pointer' | 'html'
 
 export type EventRow = {
   id: number

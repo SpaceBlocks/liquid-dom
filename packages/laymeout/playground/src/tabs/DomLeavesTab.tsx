@@ -63,8 +63,8 @@ export function DomLeavesTab() {
     if (!title || !body || !action || !stage) return undefined
 
     disposedRef.current = false
-    const titleNode = domLeaf({ element: title, sizing: 'proposal-width' })
-    const bodyNode = domLeaf({ element: body, sizing: 'proposal-width' })
+    const titleNode = domLeaf({ element: title, sizing: 'constrained-width' })
+    const bodyNode = domLeaf({ element: body, sizing: 'constrained-width' })
     const actionNode = domLeaf({ element: action })
     const rootFrame = frame(
       padding(

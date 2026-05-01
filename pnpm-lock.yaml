@@ -142,12 +142,24 @@ importers:
         specifier: workspace:*
         version: link:../laymeout
     devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       '@webgpu/types':
         specifier: ^0.1.69
         version: 0.1.69
       jsdom:
         specifier: ^27.2.0
         version: 27.4.0
+      react:
+        specifier: ^19.2.4
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.5(react@19.2.5)
       tsup:
         specifier: ^8.5.0
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.12)(typescript@6.0.2)

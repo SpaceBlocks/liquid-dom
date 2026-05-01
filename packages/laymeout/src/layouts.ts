@@ -78,7 +78,6 @@ export type LeafSpec = {
   measure: LeafMeasure
   subscribe?: LeafSubscribe
   measureKey?: unknown
-  subscriptionKey?: unknown
 }
 
 export type DefineLayoutOptions = {
@@ -170,14 +169,12 @@ class LeafLayoutNode extends BaseLayoutNode implements LeafNode {
   private _measure: LeafMeasure
   private _subscribe: LeafSubscribe | undefined
   private _measureKey: unknown
-  private _subscriptionKey: unknown
 
   constructor(spec: LeafSpec) {
     super('leaf')
     this._measure = spec.measure
     this._subscribe = spec.subscribe
     this._measureKey = spec.measureKey
-    this._subscriptionKey = spec.subscriptionKey
   }
 
   get measure(): LeafMeasure {
@@ -210,16 +207,6 @@ class LeafLayoutNode extends BaseLayoutNode implements LeafNode {
     this.markMeasureDirty()
   }
 
-  get subscriptionKey(): unknown {
-    return this._subscriptionKey
-  }
-
-  set subscriptionKey(value: unknown) {
-    if (Object.is(this._subscriptionKey, value)) return
-    this._subscriptionKey = value
-    this.notifyTreeChanged()
-  }
-
   override measureSelf(input: LayoutMeasureInput): Size {
     return sanitizeSize(this._measure(input.proposal, this))
   }
@@ -231,7 +218,6 @@ class LeafLayoutNode extends BaseLayoutNode implements LeafNode {
   override getSubscriptionSpec() {
     return {
       subscribe: this._subscribe,
-      subscriptionKey: this._subscriptionKey,
     }
   }
 

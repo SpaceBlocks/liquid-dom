@@ -17,7 +17,6 @@ type SubscriptionRecord = {
   cleanup: (() => void) | undefined
   node: BaseLayoutNode
   subscribe: LeafSubscribe
-  subscriptionKey: unknown
 }
 
 const EMPTY_STATS: LayoutDebugStats = {
@@ -197,7 +196,7 @@ class DefaultLayoutEngine implements LayoutEngine {
     for (const [id, record] of [...this.subscriptions.entries()]) {
       const current = reachable.get(id)
       const spec = current?.getSubscriptionSpec()
-      if (!current || current.disposed || !spec?.subscribe || spec.subscribe !== record.subscribe || !Object.is(spec.subscriptionKey, record.subscriptionKey)) {
+      if (!current || current.disposed || !spec?.subscribe || spec.subscribe !== record.subscribe) {
         this.disposeSubscription(id)
       }
     }
@@ -217,7 +216,6 @@ class DefaultLayoutEngine implements LayoutEngine {
         cleanup: typeof cleanup === 'function' ? cleanup : undefined,
         node,
         subscribe: spec.subscribe,
-        subscriptionKey: spec.subscriptionKey,
       })
     }
   }

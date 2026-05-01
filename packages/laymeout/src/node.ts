@@ -12,7 +12,6 @@ let nextNodeId = 0
 
 export type SubscriptionSpec = {
   subscribe: LeafSubscribe | undefined
-  subscriptionKey: unknown
 }
 
 export class BaseLayoutNode implements LayoutNode {

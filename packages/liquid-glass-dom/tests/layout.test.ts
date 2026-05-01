@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   Background,
   Frame,
@@ -17,14 +17,25 @@ import {
   Glass as SceneGlass,
 } from '../src/scene'
 
+function fixedHtml(width: number, height: number) {
+  const frame = new Frame({ width, height })
+  const html = frame.add(new Html({ sizing: 'fill' }))
+  return { frame, html }
+}
+
 describe('layout UI tree', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('positions fixed-size HTML leaves from layout', () => {
     const scene = new LayoutScene()
-    const html = scene.add(new Html({ width: 80, height: 24 }))
+    const { frame, html } = fixedHtml(80, 24)
+    scene.add(frame)
 
     const stats = scene.layout({})
 
-    expect(stats.nodes).toBe(1)
+    expect(stats.nodes).toBe(2)
     expect(html.layoutNode.layout?.rect).toEqual({ x: 0, y: 0, width: 80, height: 24 })
     expect(html.sceneNode.x).toBe(0)
     expect(html.sceneNode.y).toBe(0)
@@ -40,8 +51,8 @@ describe('layout UI tree', () => {
     const firstGlass = frame.add(new Glass())
     const secondGlass = row.add(new Glass())
 
-    firstGlass.add(new Html({ width: 20, height: 10 }))
-    secondGlass.add(new Html({ width: 30, height: 10 }))
+    firstGlass.add(fixedHtml(20, 10).frame)
+    secondGlass.add(fixedHtml(30, 10).frame)
     scene.layout({})
 
     const glassLayers = flattenContainerGlasses(container.sceneNode)
@@ -58,9 +69,13 @@ describe('layout UI tree', () => {
   it('composes group-backed layout node transforms into flattened scene layers', () => {
     const scene = new LayoutScene()
     const row = scene.add(new HStack({ spacing: 4, alignment: 'top' }))
-    const first = row.add(new Html({ width: 10, height: 10 }))
+    const firstHtml = fixedHtml(10, 10)
+    const first = firstHtml.html
+    row.add(firstHtml.frame)
     const frame = row.add(new Frame({ width: 20, height: 20, alignment: 'bottomTrailing' }))
-    const second = frame.add(new Html({ width: 5, height: 5 }))
+    const secondHtml = fixedHtml(5, 5)
+    const second = secondHtml.html
+    frame.add(secondHtml.frame)
 
     scene.layout({})
 
@@ -76,18 +91,18 @@ describe('layout UI tree', () => {
   it('rejects a second child for noop-backed single-child wrappers', () => {
     const frame = new Frame()
 
-    frame.add(new Html({ width: 1, height: 1 }))
+    frame.add(new Html())
 
-    expect(() => frame.add(new Html({ width: 1, height: 1 }))).toThrow(/exactly one child/)
+    expect(() => frame.add(new Html())).toThrow(/exactly one child/)
   })
 
   it('keeps background and overlay layout slots while applying scene paint order', () => {
     const background = new Background()
-    const backgroundContent = background.add(new Html({ width: 10, height: 10 }))
-    const backgroundDecoration = background.add(new Html({ width: 20, height: 20 }))
+    const backgroundContent = background.add(new Html())
+    const backgroundDecoration = background.add(new Html())
     const overlay = new Overlay()
-    const overlayContent = overlay.add(new Html({ width: 10, height: 10 }))
-    const overlayDecoration = overlay.add(new Html({ width: 20, height: 20 }))
+    const overlayContent = overlay.add(new Html())
+    const overlayDecoration = overlay.add(new Html())
 
     expect(background.layoutNode.children).toEqual([
       backgroundContent.layoutNode,
@@ -116,7 +131,7 @@ describe('layout UI tree', () => {
   it('combines transform node options with layout placement', () => {
     const scene = new LayoutScene()
     const row = scene.add(new HStack({ spacing: 5, alignment: 'top' }))
-    row.add(new Html({ width: 20, height: 10 }))
+    row.add(fixedHtml(20, 10).frame)
     const transform = row.add(new Transform({
       x: 3,
       y: 4,
@@ -125,7 +140,7 @@ describe('layout UI tree', () => {
       rotation: 0.25,
       origin: { x: 1, y: 2 },
     }))
-    transform.add(new Html({ width: 10, height: 10 }))
+    transform.add(fixedHtml(10, 10).frame)
 
     scene.layout({})
 
@@ -135,5 +150,84 @@ describe('layout UI tree', () => {
     expect(transform.sceneNode.scaleY).toBe(0.5)
     expect(transform.sceneNode.rotation).toBe(0.25)
     expect(transform.sceneNode.origin).toEqual({ x: 1, y: 2 })
+  })
+
+  it('emits layout and frame invalidations from retained node mutations', () => {
+    const scene = new LayoutScene()
+    const container = scene.add(new GlassContainer())
+    const row = container.add(new HStack())
+    const glass = row.add(new Glass())
+    const events: string[] = []
+    scene.addInvalidationListener((event) => events.push(event.kind))
+
+    row.spacing = 12
+    glass.cornerRadius = 18
+
+    expect(events).toEqual(['layout', 'frame'])
+  })
+
+  it('emits layout invalidation when an HTML measured element is replaced', () => {
+    const scene = new LayoutScene()
+    const html = scene.add(new Html())
+    const events: string[] = []
+    scene.addInvalidationListener((event) => events.push(event.kind))
+
+    html.setElement(document.createElement('div'))
+
+    expect(events).toEqual(['layout'])
+  })
+
+  it('lets owned fill HTML portal roots fill their scene host', () => {
+    const html = new Html({ sizing: 'fill' })
+
+    expect(html.element?.style.display).toBe('block')
+    expect(html.element?.style.width).toBe('100%')
+    expect(html.element?.style.height).toBe('100%')
+    expect(html.element?.style.boxSizing).toBe('border-box')
+
+    html.sizing = 'intrinsic'
+
+    expect(html.element?.style.display).toBe('')
+    expect(html.element?.style.width).toBe('')
+    expect(html.element?.style.height).toBe('')
+    expect(html.element?.style.boxSizing).toBe('')
+  })
+
+  it('does not mutate externally provided fill HTML elements', () => {
+    const element = document.createElement('div')
+    element.style.width = '240px'
+
+    new Html({ element, sizing: 'fill' })
+
+    expect(element.style.width).toBe('240px')
+    expect(element.style.height).toBe('')
+    expect(element.style.display).toBe('')
+  })
+
+  it('forwards DOM measurement subscription invalidations through LayoutScene', () => {
+    let resizeCallback: ((entries?: ResizeObserverEntry[]) => void) | undefined
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: (entries?: ResizeObserverEntry[]) => void) {
+        resizeCallback = callback
+      }
+
+      observe() {
+        return
+      }
+
+      disconnect() {
+        return
+      }
+    })
+
+    const scene = new LayoutScene()
+    scene.add(new Html())
+    const events: string[] = []
+    scene.addInvalidationListener((event) => events.push(event.kind))
+
+    scene.layout({})
+    resizeCallback?.([{ contentRect: { width: 10, height: 10 } } as ResizeObserverEntry])
+
+    expect(events).toEqual(['layout'])
   })
 })
