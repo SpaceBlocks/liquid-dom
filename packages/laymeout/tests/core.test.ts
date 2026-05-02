@@ -103,6 +103,25 @@ describe('built-in layouts', () => {
     expect(rect(child)).toEqual({ x: 0, y: 5, width: 50, height: 10 })
   })
 
+  it('applies frame sizing behavior without children', () => {
+    const fixed = frame({ width: 50, height: 20 })
+    const ideal = frame({
+      idealWidth: 40,
+      idealHeight: 16,
+      minWidth: 48,
+      maxHeight: 14,
+    })
+    const expanding = frame({ maxWidth: 'infinity', maxHeight: 'infinity' })
+
+    layout(fixed, { width: 100, height: 100 })
+    layout(ideal, { width: 100, height: 100 })
+    layout(expanding, { width: 80, height: 24 })
+
+    expect(rect(fixed)).toEqual({ x: 0, y: 0, width: 50, height: 20 })
+    expect(rect(ideal)).toEqual({ x: 0, y: 0, width: 48, height: 14 })
+    expect(rect(expanding)).toEqual({ x: 0, y: 0, width: 80, height: 24 })
+  })
+
   it('adds padding around child measurements and placement', () => {
     const child = box({ width: 10, height: 20 })
     const root = padding(child, { horizontal: 4, vertical: 2 })

@@ -460,10 +460,9 @@ class FrameLayoutNode extends BaseLayoutNode implements FrameNode {
 
   override measureSelf(input: LayoutMeasureInput): Size {
     const child = input.children[0]
-    if (!child) return { width: 0, height: 0 }
     const props = this.runtimeProps()
     const childProposal = frameChildProposal(input.proposal, props)
-    const childSize = child.measure(childProposal)
+    const childSize = child?.measure(childProposal) ?? emptyFrameChildSize(props)
     return frameReportedSize(childSize, input.proposal, props)
   }
 
@@ -720,6 +719,13 @@ function frameReportedSize(childSize: Size, proposal: ProposedSize, props: Frame
     props.maxWidth,
     props.maxHeight,
   )
+}
+
+function emptyFrameChildSize(props: FrameRuntimeProps): Size {
+  return {
+    width: props.idealWidth ?? 0,
+    height: props.idealHeight ?? 0,
+  }
 }
 
 function clampProposal(value: number | undefined, min?: number, max?: number): number | undefined {
