@@ -77,6 +77,155 @@ import {
 } from 'liquid-glass-dom'
 ```
 
+React 19 bindings are available from the `react` subpath:
+
+```tsx
+import {
+  Frame,
+  Glass,
+  GlassContainer,
+  HStack,
+  Html,
+  LayoutCanvas,
+  spring,
+  useAnimate,
+  useTimeline,
+  type GlassRef,
+} from 'liquid-glass-dom/react'
+```
+
+## React Animation
+
+`LayoutCanvas` owns the renderer, layout scene, and animation clock. Declarative and imperative animations run on the same `requestAnimationFrame` loop used for layout and rendering.
+
+Animations mutate retained layout UI nodes directly. React sets targets; it does not re-render every animation frame.
+
+### Spring Transitions
+
+Add a `transition` prop to animate component prop changes:
+
+```tsx
+<GlassContainer>
+  <Frame
+    width={expanded ? 260 : 140}
+    height={120}
+    transition={{
+      width: spring({ stiffness: 360, damping: 34 }),
+    }}
+  >
+    <Glass>
+      <Html sizing="fill">
+        <div>Resizable content</div>
+      </Html>
+    </Glass>
+  </Frame>
+</GlassContainer>
+```
+
+Only properties listed in `transition` animate. Other changed props are assigned immediately. Numeric values and numeric object values, such as `tint`, can animate; strings, booleans, and enums snap to their new value.
+
+You can also pass one transition for every animatable changed prop:
+
+```tsx
+<HStack
+  spacing={wide ? 32 : 8}
+  transition={spring({ stiffness: 300, damping: 30 })}
+/>
+```
+
+### Glass Hover And Press
+
+`Glass` supports `whileHover` and `whilePress` convenience props. They accept `Glass` props, apply while the glass is hovered or pressed, and return to the normal component props afterward. They do not accept transform props; wrap the glass in `Transform` when you want transform animation.
+
+```tsx
+<GlassContainer>
+  <Glass
+    cornerRadius={32}
+    transition={{
+      cornerRadius: spring({ stiffness: 520, damping: 42 }),
+      zIndex: false,
+    }}
+    whileHover={{
+      cornerRadius: 52,
+      zIndex: 10,
+    }}
+    whilePress={{
+      cornerRadius: 20,
+    }}
+  >
+    <Frame width={160} height={96}>
+      <Html sizing="fill">
+        <button>Press</button>
+      </Html>
+    </Frame>
+  </Glass>
+</GlassContainer>
+```
+
+`whilePress` takes precedence over `whileHover` when both provide the same prop. These props imply `pointerEvents={true}` unless `pointerEvents={false}` is set explicitly.
+
+As with normal prop changes, hover and press values animate only when the affected property is present in `transition`; otherwise they snap.
+
+### Imperative Animations
+
+Use `useAnimate()` for direct retained-node animations:
+
+```tsx
+import { useRef } from 'react'
+
+function PulseButton() {
+  const glassRef = useRef<GlassRef | null>(null)
+  const animate = useAnimate()
+
+  return (
+    <GlassContainer>
+      <Glass
+        ref={glassRef}
+        pointerEvents
+        onClick={() => {
+          animate(glassRef.current, {
+            cornerRadius: 56,
+          }, spring({ stiffness: 500, damping: 40 }))
+        }}
+      />
+    </GlassContainer>
+  )
+}
+```
+
+`useAnimate()` returns controls with a `finished` promise and `stop()` method:
+
+```ts
+const controls = animate(node, { cornerRadius: 48 }, spring())
+await controls.finished
+controls.stop()
+```
+
+### Timelines
+
+Use `useTimeline()` when animations need to run in sequence:
+
+```tsx
+function Sequence({ first, second }: {
+  first: React.RefObject<GlassRef | null>
+  second: React.RefObject<GlassRef | null>
+}) {
+  const timeline = useTimeline(spring({ stiffness: 420, damping: 36 }))
+
+  function play() {
+    timeline()
+      .to(first.current, { cornerRadius: 56 })
+      .to(second.current, { cornerRadius: 16 })
+      .to(first.current, { cornerRadius: 32 })
+      .play()
+  }
+
+  return <button onClick={play}>Play</button>
+}
+```
+
+Timeline steps run one after another. Each `.to(...)` uses the timeline default transition unless a step-specific transition is provided.
+
 ## Scene Graph
 
 `Scene` is the root. It accepts `Container` and `Html` children:
