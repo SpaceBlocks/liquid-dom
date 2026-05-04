@@ -64,6 +64,8 @@ import {
   GLASS_SHADER,
   HTML_COMPOSITE_SHADER,
   METRICS_SHADER,
+  SHADOW_COMPOSITE_SHADER,
+  SHADOW_MASK_SHADER,
 } from '../shaders'
 import { PointerController } from './pointer-controller'
 import type { SurfaceProfile } from '../types'
@@ -88,6 +90,7 @@ type ShapeDataBuffer = GpuStructArrayBuffer<GpuStructDefinition<typeof ShapeData
 type BackdropMetricsBoundsBuffer = GpuStructBuffer<GpuStructDefinition<typeof BackdropMetricsBoundsLayout>>
 type HtmlCompositeParamsBuffer = GpuStructBuffer<GpuStructDefinition<typeof HtmlCompositeParamsLayout>>
 const DISPLACEMENT_FIELD_FORMAT = 'rgba16float' satisfies GPUTextureFormat
+const SHADOW_MASK_FORMAT = 'rgba8unorm' satisfies GPUTextureFormat
 
 /** Maps a public surface profile string to the shader enum value. */
 function getSurfaceProfileIndex(profile: SurfaceProfile) {
@@ -139,7 +142,10 @@ export class Renderer {
   private sampler: GPUSampler | null = null
   private backdropBlurResources: AdaptiveBlurResources | null = null
   private displacementBlurResources: AdaptiveBlurResources | null = null
+  private shadowBlurResources: AdaptiveBlurResources | null = null
   private displacementFieldPipeline: GPURenderPipeline | null = null
+  private shadowMaskPipeline: GPURenderPipeline | null = null
+  private shadowCompositePipeline: GPURenderPipeline | null = null
   private glassPipeline: GPURenderPipeline | null = null
   private htmlCompositePipeline: GPURenderPipeline | null = null
   private backdropMetricsPipeline: GPURenderPipeline | null = null
@@ -260,8 +266,10 @@ export class Renderer {
     this.shapesBuffer?.destroy()
     destroyAdaptiveBlurResources(this.backdropBlurResources)
     destroyAdaptiveBlurResources(this.displacementBlurResources)
+    destroyAdaptiveBlurResources(this.shadowBlurResources)
     this.backdropBlurResources = null
     this.displacementBlurResources = null
+    this.shadowBlurResources = null
     this.backdropMetricsBoundsBuffer?.destroy()
     this.htmlCompositeParamsBuffer?.destroy()
     this.backdropMetrics.destroy()
@@ -301,6 +309,7 @@ export class Renderer {
     const htmlCompositeParamsBuffer = new GpuStructBuffer(device, HtmlCompositeParamsLayout, uniformBufferUsage)
     const backdropBlurResources = createAdaptiveBlurResources(device, presentationFormat)
     const displacementBlurResources = createAdaptiveBlurResources(device, DISPLACEMENT_FIELD_FORMAT)
+    const shadowBlurResources = createAdaptiveBlurResources(device, SHADOW_MASK_FORMAT)
 
     const displacementFieldPipeline = device.createRenderPipeline({
       layout: 'auto',
@@ -326,6 +335,38 @@ export class Renderer {
       },
       fragment: {
         module: device.createShaderModule({ code: GLASS_SHADER }),
+        entryPoint: 'fragmentMain',
+        targets: [{ format: presentationFormat }],
+      },
+      primitive: {
+        topology: 'triangle-list',
+      },
+    })
+
+    const shadowMaskPipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: device.createShaderModule({ code: SHADOW_MASK_SHADER }),
+        entryPoint: 'vertexMain',
+      },
+      fragment: {
+        module: device.createShaderModule({ code: SHADOW_MASK_SHADER }),
+        entryPoint: 'fragmentMain',
+        targets: [{ format: SHADOW_MASK_FORMAT }],
+      },
+      primitive: {
+        topology: 'triangle-list',
+      },
+    })
+
+    const shadowCompositePipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: {
+        module: device.createShaderModule({ code: SHADOW_COMPOSITE_SHADER }),
+        entryPoint: 'vertexMain',
+      },
+      fragment: {
+        module: device.createShaderModule({ code: SHADOW_COMPOSITE_SHADER }),
         entryPoint: 'fragmentMain',
         targets: [{ format: presentationFormat }],
       },
@@ -385,7 +426,10 @@ export class Renderer {
     this.htmlCompositeParamsBuffer = htmlCompositeParamsBuffer
     this.backdropBlurResources = backdropBlurResources
     this.displacementBlurResources = displacementBlurResources
+    this.shadowBlurResources = shadowBlurResources
     this.displacementFieldPipeline = displacementFieldPipeline
+    this.shadowMaskPipeline = shadowMaskPipeline
+    this.shadowCompositePipeline = shadowCompositePipeline
     this.glassPipeline = glassPipeline
     this.htmlCompositePipeline = htmlCompositePipeline
     this.backdropMetricsPipeline = backdropMetricsPipeline
@@ -429,6 +473,7 @@ export class Renderer {
       this.targets = {
         backdropBlur: createAdaptiveBlurTargetChain(this.device, this.presentationFormat, nextWidth, nextHeight),
         displacementBlur: createAdaptiveBlurTargetChain(this.device, DISPLACEMENT_FIELD_FORMAT, nextWidth, nextHeight),
+        shadowBlur: createAdaptiveBlurTargetChain(this.device, SHADOW_MASK_FORMAT, nextWidth, nextHeight),
         sceneA: createRenderTarget(this.device, this.presentationFormat, nextWidth, nextHeight),
         sceneB: createRenderTarget(this.device, this.presentationFormat, nextWidth, nextHeight),
       }
@@ -558,6 +603,18 @@ export class Renderer {
         b: container.tint.b,
         a: container.tint.a,
       },
+      shadow: {
+        offsetX: container.shadowOffsetX * dpr,
+        offsetY: container.shadowOffsetY * dpr,
+        spread: container.shadowSpread * dpr,
+        blur: container.shadowBlur * dpr,
+      },
+      shadowColor: {
+        r: container.shadowColor.r,
+        g: container.shadowColor.g,
+        b: container.shadowColor.b,
+        a: container.shadowColor.a,
+      },
       debug: {
         displacement: container.debugDisplacement ? 1 : 0,
       },
@@ -681,6 +738,64 @@ export class Renderer {
       chain: this.targets.displacementBlur,
       resources: this.displacementBlurResources,
     })
+  }
+
+  /** Renders the container shadow mask, blurs it, and composites it under the glass. */
+  private renderShadow(
+    encoder: GPUCommandEncoder,
+    source: GPUTexture,
+    target: GPUTexture,
+    targetContainer: Container,
+  ) {
+    if (
+      targetContainer.shadowColor.a <= 0 ||
+      !this.device ||
+      !this.sampler ||
+      !this.shadowMaskPipeline ||
+      !this.shadowCompositePipeline ||
+      !this.shadowBlurResources ||
+      !this.globalsBuffer ||
+      !this.shapesBuffer?.buffer ||
+      !this.targets
+    ) {
+      return false
+    }
+
+    const rawLevel = this.targets.shadowBlur.levels[0]
+    const maskBindGroup = createPipelineBindGroup(this.device, this.shadowMaskPipeline, [
+      { binding: 0, resource: this.globalsBuffer.bindingResource },
+      { binding: 1, resource: this.shapesBuffer.bindingResource },
+    ])
+    drawFullscreenPass(encoder, {
+      pipeline: this.shadowMaskPipeline,
+      bindGroup: maskBindGroup,
+      target: rawLevel.ping,
+      clearValue: { r: 0, g: 0, b: 0, a: 0 },
+    })
+
+    const blurredMask = renderAdaptiveBlur({
+      device: this.device,
+      sampler: this.sampler,
+      encoder,
+      source: rawLevel.ping,
+      radiusPx: targetContainer.shadowBlur * this.currentDpr,
+      chain: this.targets.shadowBlur,
+      resources: this.shadowBlurResources,
+    })
+
+    const compositeBindGroup = createPipelineBindGroup(this.device, this.shadowCompositePipeline, [
+      { binding: 0, resource: this.sampler },
+      { binding: 1, resource: source.createView() },
+      { binding: 2, resource: blurredMask.createView() },
+      { binding: 3, resource: this.globalsBuffer.bindingResource },
+    ])
+    drawFullscreenPass(encoder, {
+      pipeline: this.shadowCompositePipeline,
+      bindGroup: compositeBindGroup,
+      target,
+    })
+
+    return true
   }
 
   /** Renders and queues copy commands for one backdrop metrics target. */
@@ -917,6 +1032,9 @@ export class Renderer {
       !this.displacementFieldPipeline ||
       !this.backdropBlurResources ||
       !this.displacementBlurResources ||
+      !this.shadowBlurResources ||
+      !this.shadowMaskPipeline ||
+      !this.shadowCompositePipeline ||
       !this.htmlCompositePipeline
     ) {
       return
@@ -964,6 +1082,10 @@ export class Renderer {
           packedShapes.bounds,
           blurredBackdrop,
         )
+      }
+
+      if (this.renderShadow(composer.encoder, composer.current, composer.next, entry.child)) {
+        composer.submitAndSwap()
       }
 
       this.renderContainer(composer.encoder, composer.current, blurredBackdrop, displacementField, composer.next)

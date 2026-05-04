@@ -15,6 +15,8 @@ export const GlobalsLayout = structLayout({
   specular: vec4('strength', 'width', 'sharpness', 'opacity'),
   specularSecondary: vec4('oppositeStrength', 'falloff', 'reflectionOffset'),
   tint: vec4('r', 'g', 'b', 'a'),
+  shadow: vec4('offsetX', 'offsetY', 'spread', 'blur'),
+  shadowColor: vec4('r', 'g', 'b', 'a'),
   debug: vec4('displacement'),
 })
 

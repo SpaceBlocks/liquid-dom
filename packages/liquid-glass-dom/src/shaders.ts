@@ -387,6 +387,51 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
 }
 `
 
+// Writes a sharp alpha mask for the container's offset SDF silhouette. The
+// renderer blurs this mask with the shared adaptive blur pipeline before
+// compositing it under the glass.
+export const SHADOW_MASK_SHADER = /* wgsl */ `
+${SHADER_SHARED}
+
+@group(0) @binding(0) var<uniform> globals: Globals;
+@group(0) @binding(1) var<storage, read> shapes: array<ShapeData>;
+
+@fragment
+fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+  let shapeCount = u32(globals.shape.z);
+  let fragCoord = in.uv * globals.canvas.xy;
+  let shadowCoord = fragCoord - globals.shadow.xy;
+  let distance = sceneSdfSample(shadowCoord, shapeCount, globals.shape.x).distance - globals.shadow.z;
+  let pixelWidth = max(fwidth(distance), 0.75);
+  let alpha = 1.0 - smoothstep(0.0, pixelWidth, distance);
+
+  return vec4f(0.0, 0.0, 0.0, alpha);
+}
+`
+
+// Composites a blurred shadow mask over the current scene. This happens before
+// the glass pass so the glass itself samples the pre-shadow backdrop while later
+// containers still see shadows from earlier containers.
+export const SHADOW_COMPOSITE_SHADER = /* wgsl */ `
+${GlobalsLayout.wgsl('Globals')}
+${FULLSCREEN_VERTEX}
+
+@group(0) @binding(0) var shadowSampler: sampler;
+@group(0) @binding(1) var sceneTexture: texture_2d<f32>;
+@group(0) @binding(2) var shadowMaskTexture: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> globals: Globals;
+
+@fragment
+fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+  let sceneColor = textureSampleLevel(sceneTexture, shadowSampler, in.uv, 0.0);
+  let shadowMask = textureSampleLevel(shadowMaskTexture, shadowSampler, in.uv, 0.0).a;
+  let shadowOpacity = clamp(shadowMask * globals.shadowColor.a, 0.0, 1.0);
+  let color = mix(sceneColor.rgb, globals.shadowColor.rgb, shadowOpacity);
+
+  return vec4f(color, sceneColor.a);
+}
+`
+
 // Used by the main glass render pass. This shades the fused glass containers,
 // sampling the sharp and blurred backdrop textures for refraction, reflection, and highlights.
 export const GLASS_SHADER = /* wgsl */ `

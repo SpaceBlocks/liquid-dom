@@ -58,6 +58,11 @@ export type ContainerInit = Partial<Transform> & {
   specularOpacity?: number
   reflectionOffset?: number
   tint?: RgbaColor
+  shadowColor?: RgbaColor
+  shadowOffsetX?: number
+  shadowOffsetY?: number
+  shadowBlur?: number
+  shadowSpread?: number
   debugDisplacement?: boolean
   zIndex?: number
 }
@@ -605,6 +610,16 @@ export class Container implements Transform {
   reflectionOffset = 18
   /** RGBA tint color layered over the refracted glass interior. */
   tint: RgbaColor = { r: 0.15, g: 0.15, b: 0.15, a: 0.7 }
+  /** RGBA color used by the container's drop shadow. Alpha `0` disables shadows. */
+  shadowColor: RgbaColor = { r: 0, g: 0, b: 0, a: 0 }
+  /** Horizontal drop shadow offset in CSS pixels. */
+  shadowOffsetX = 0
+  /** Vertical drop shadow offset in CSS pixels. */
+  shadowOffsetY = 0
+  /** Drop shadow blur radius in CSS pixels. */
+  shadowBlur = 0
+  /** Drop shadow spread in CSS pixels. Positive values expand the silhouette. */
+  shadowSpread = 0
   /** Renders the calculated displacement field instead of the shaded glass. */
   debugDisplacement = false
   /** Draw order among scene layers; higher values render later. */
@@ -676,6 +691,21 @@ export class Container implements Transform {
     }
     if (options.tint !== undefined) {
       this.tint = cloneColor(options.tint)
+    }
+    if (options.shadowColor !== undefined) {
+      this.shadowColor = cloneColor(options.shadowColor)
+    }
+    if (options.shadowOffsetX !== undefined) {
+      this.shadowOffsetX = options.shadowOffsetX
+    }
+    if (options.shadowOffsetY !== undefined) {
+      this.shadowOffsetY = options.shadowOffsetY
+    }
+    if (options.shadowBlur !== undefined) {
+      this.shadowBlur = options.shadowBlur
+    }
+    if (options.shadowSpread !== undefined) {
+      this.shadowSpread = options.shadowSpread
     }
     if (options.debugDisplacement !== undefined) {
       this.debugDisplacement = options.debugDisplacement

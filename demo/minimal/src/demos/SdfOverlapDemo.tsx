@@ -21,8 +21,15 @@ const INITIAL_CONTAINER_SPACING = 34
 const INITIAL_BLUR = 7
 const INITIAL_BEZEL_WIDTH = 18
 const INITIAL_DISPLACEMENT_BLUR = 8
+const INITIAL_CORNER_RADIUS = 42
 const INITIAL_TINT_HEX = '#cfcfcf'
 const INITIAL_TINT_OPACITY = 62
+const INITIAL_SHADOW_HEX = '#000000'
+const INITIAL_SHADOW_OPACITY = 32
+const INITIAL_SHADOW_OFFSET_X = 0
+const INITIAL_SHADOW_OFFSET_Y = 22
+const INITIAL_SHADOW_BLUR = 34
+const INITIAL_SHADOW_SPREAD = 0
 
 export default function SdfOverlapDemo() {
   const [distance, setDistance] = useState(INITIAL_DISTANCE)
@@ -30,8 +37,15 @@ export default function SdfOverlapDemo() {
   const [blur, setBlur] = useState(INITIAL_BLUR)
   const [bezelWidth, setBezelWidth] = useState(INITIAL_BEZEL_WIDTH)
   const [displacementBlur, setDisplacementBlur] = useState(INITIAL_DISPLACEMENT_BLUR)
+  const [cornerRadius, setCornerRadius] = useState(INITIAL_CORNER_RADIUS)
   const [tintHex, setTintHex] = useState(INITIAL_TINT_HEX)
   const [tintOpacity, setTintOpacity] = useState(INITIAL_TINT_OPACITY)
+  const [shadowHex, setShadowHex] = useState(INITIAL_SHADOW_HEX)
+  const [shadowOpacity, setShadowOpacity] = useState(INITIAL_SHADOW_OPACITY)
+  const [shadowOffsetX, setShadowOffsetX] = useState(INITIAL_SHADOW_OFFSET_X)
+  const [shadowOffsetY, setShadowOffsetY] = useState(INITIAL_SHADOW_OFFSET_Y)
+  const [shadowBlur, setShadowBlur] = useState(INITIAL_SHADOW_BLUR)
+  const [shadowSpread, setShadowSpread] = useState(INITIAL_SHADOW_SPREAD)
   const [showCheckerboard, setShowCheckerboard] = useState(true)
   const [debugDisplacement, setDebugDisplacement] = useState(false)
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null)
@@ -39,6 +53,7 @@ export default function SdfOverlapDemo() {
   const backgroundImageUrlRef = useRef<string | null>(null)
   const centerOffset = (GLASS_WIDTH + distance) / 2
   const tintColor = hexToRgb(tintHex)
+  const shadowColor = hexToRgb(shadowHex)
 
   useEffect(() => {
     let isMounted = true
@@ -122,14 +137,19 @@ export default function SdfOverlapDemo() {
               contentDepth={18}
               debugDisplacement={debugDisplacement}
               tint={{ ...tintColor, a: tintOpacity / 100 }}
+              shadowColor={{ ...shadowColor, a: shadowOpacity / 100 }}
+              shadowOffsetX={shadowOffsetX}
+              shadowOffsetY={shadowOffsetY}
+              shadowBlur={shadowBlur}
+              shadowSpread={shadowSpread}
               specularOpacity={0.7}
             >
               <ZStack alignment="center">
                 <Transform x={-centerOffset}>
-                  <OverlapGlass />
+                  <OverlapGlass cornerRadius={cornerRadius} />
                 </Transform>
                 <Transform x={centerOffset}>
-                  <OverlapGlass />
+                  <OverlapGlass cornerRadius={cornerRadius} />
                 </Transform>
               </ZStack>
             </GlassContainer>
@@ -175,6 +195,15 @@ export default function SdfOverlapDemo() {
           onChange={setBezelWidth}
         />
         <Control
+          id="sdf-corner-radius"
+          label="Corner radius"
+          value={cornerRadius}
+          min={0}
+          max={120}
+          unit="px"
+          onChange={setCornerRadius}
+        />
+        <Control
           id="sdf-displacement-blur"
           label="Displacement blur"
           value={displacementBlur}
@@ -188,6 +217,50 @@ export default function SdfOverlapDemo() {
           opacity={tintOpacity}
           onColorChange={setTintHex}
           onOpacityChange={setTintOpacity}
+        />
+        <ColorOpacityControl
+          id="sdf-shadow"
+          label="Shadow color"
+          color={shadowHex}
+          opacity={shadowOpacity}
+          onColorChange={setShadowHex}
+          onOpacityChange={setShadowOpacity}
+        />
+        <Control
+          id="sdf-shadow-offset-x"
+          label="Shadow X"
+          value={shadowOffsetX}
+          min={-120}
+          max={120}
+          unit="px"
+          onChange={setShadowOffsetX}
+        />
+        <Control
+          id="sdf-shadow-offset-y"
+          label="Shadow Y"
+          value={shadowOffsetY}
+          min={-120}
+          max={160}
+          unit="px"
+          onChange={setShadowOffsetY}
+        />
+        <Control
+          id="sdf-shadow-blur"
+          label="Shadow blur"
+          value={shadowBlur}
+          min={0}
+          max={120}
+          unit="px"
+          onChange={setShadowBlur}
+        />
+        <Control
+          id="sdf-shadow-spread"
+          label="Shadow spread"
+          value={shadowSpread}
+          min={-80}
+          max={120}
+          unit="px"
+          onChange={setShadowSpread}
         />
         <Toggle
           id="sdf-checkerboard"
@@ -211,9 +284,9 @@ export default function SdfOverlapDemo() {
   )
 }
 
-function OverlapGlass() {
+function OverlapGlass({ cornerRadius }: { cornerRadius: number }) {
   return (
-    <Glass cornerRadius={42}>
+    <Glass cornerRadius={cornerRadius}>
       <Frame width={GLASS_WIDTH} height={GLASS_HEIGHT} />
     </Glass>
   )
@@ -313,19 +386,52 @@ type TintControlProps = {
 
 function TintControl({ color, opacity, onColorChange, onOpacityChange }: TintControlProps) {
   return (
-    <div className="layout-control sdf-overlap-tint-control">
-      <span id="sdf-tint-label">Glass tint</span>
-      <output htmlFor="sdf-tint-color sdf-tint-opacity">{color} / {opacity}%</output>
-      <div className="sdf-overlap-tint-row">
+    <ColorOpacityControl
+      id="sdf-tint"
+      label="Glass tint"
+      color={color}
+      opacity={opacity}
+      onColorChange={onColorChange}
+      onOpacityChange={onOpacityChange}
+    />
+  )
+}
+
+type ColorOpacityControlProps = {
+  id: string
+  label: string
+  color: string
+  opacity: number
+  onColorChange: (color: string) => void
+  onOpacityChange: (opacity: number) => void
+}
+
+function ColorOpacityControl({
+  id,
+  label,
+  color,
+  opacity,
+  onColorChange,
+  onOpacityChange,
+}: ColorOpacityControlProps) {
+  const labelId = `${id}-label`
+  const colorId = `${id}-color`
+  const opacityId = `${id}-opacity`
+
+  return (
+    <div className="layout-control sdf-overlap-color-control">
+      <span id={labelId}>{label}</span>
+      <output htmlFor={`${colorId} ${opacityId}`}>{color} / {opacity}%</output>
+      <div className="sdf-overlap-color-row">
         <input
-          id="sdf-tint-color"
+          id={colorId}
           type="color"
           value={color}
-          aria-labelledby="sdf-tint-label"
+          aria-labelledby={labelId}
           onChange={(event) => onColorChange(event.currentTarget.value)}
         />
         <input
-          id="sdf-tint-opacity"
+          id={opacityId}
           type="range"
           min={0}
           max={100}

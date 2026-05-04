@@ -233,18 +233,18 @@
   overflow-wrap: anywhere;
 }
 
-.sdf-overlap-tint-control {
+.sdf-overlap-color-control {
   grid-column: 1 / -1;
 }
 
-.sdf-overlap-tint-row {
+.sdf-overlap-color-row {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 76px;
   gap: 12px;
   align-items: center;
 }
 
-.sdf-overlap-tint-row input[type="color"] {
+.sdf-overlap-color-row input[type="color"] {
   width: 44px;
   height: 36px;
   padding: 2px;

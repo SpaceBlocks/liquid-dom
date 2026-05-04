@@ -18,6 +18,7 @@ export type AdaptiveBlurTargetChain = {
 export type RenderTargetSet = {
   backdropBlur: AdaptiveBlurTargetChain
   displacementBlur: AdaptiveBlurTargetChain
+  shadowBlur: AdaptiveBlurTargetChain
   sceneA: GPUTexture
   sceneB: GPUTexture
 }
@@ -107,6 +108,7 @@ export function destroyTargets(targets: RenderTargetSet | null) {
 
   destroyAdaptiveBlurTargetChain(targets.backdropBlur)
   destroyAdaptiveBlurTargetChain(targets.displacementBlur)
+  destroyAdaptiveBlurTargetChain(targets.shadowBlur)
   targets.sceneA.destroy()
   targets.sceneB.destroy()
 }

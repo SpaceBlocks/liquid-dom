@@ -1120,6 +1120,56 @@ export class GlassContainer extends SingleChildUiNode<LaymeoutNode, SceneContain
     }
   }
 
+  get shadowColor(): RgbaColor {
+    return this.sceneNode.shadowColor
+  }
+
+  set shadowColor(value: RgbaColor) {
+    if (setProperty(this.sceneNode, 'shadowColor', value)) {
+      this.invalidateFrame('shadowColor')
+    }
+  }
+
+  get shadowOffsetX(): number {
+    return this.sceneNode.shadowOffsetX
+  }
+
+  set shadowOffsetX(value: number) {
+    if (setProperty(this.sceneNode, 'shadowOffsetX', value)) {
+      this.invalidateFrame('shadowOffsetX')
+    }
+  }
+
+  get shadowOffsetY(): number {
+    return this.sceneNode.shadowOffsetY
+  }
+
+  set shadowOffsetY(value: number) {
+    if (setProperty(this.sceneNode, 'shadowOffsetY', value)) {
+      this.invalidateFrame('shadowOffsetY')
+    }
+  }
+
+  get shadowBlur(): number {
+    return this.sceneNode.shadowBlur
+  }
+
+  set shadowBlur(value: number) {
+    if (setProperty(this.sceneNode, 'shadowBlur', value)) {
+      this.invalidateFrame('shadowBlur')
+    }
+  }
+
+  get shadowSpread(): number {
+    return this.sceneNode.shadowSpread
+  }
+
+  set shadowSpread(value: number) {
+    if (setProperty(this.sceneNode, 'shadowSpread', value)) {
+      this.invalidateFrame('shadowSpread')
+    }
+  }
+
   get debugDisplacement(): boolean {
     return this.sceneNode.debugDisplacement
   }
