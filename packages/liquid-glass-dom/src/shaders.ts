@@ -149,6 +149,14 @@ const NORMAL_DIVERGENCE_BLEND_END: f32 = 0.35;
 const EXPOSURE_BAND_SCALE: f32 = 0.35;
 const MIN_EXPOSURE_BAND_PX: f32 = 1.0;
 const DEBUG_DISPLACEMENT_ENCODE_SCALE: f32 = 0.01;
+// Smooth blending can flatten the fused SDF so one distance unit covers
+// more than one screen pixel. Specular is a screen-space rim effect, so it
+// converts SDF distance back to pixels with derivatives and caps the correction
+// when the local field becomes nearly flat.
+const SPECULAR_DISTANCE_SCALE_FLOOR: f32 = 0.25;
+// Width of the antialiased feather around the specular band edge in device
+// pixels. This is separate from the configured specular band width.
+const SPECULAR_EDGE_FEATHER_PX: f32 = 1.0;
 
 // Keep the SDF value and its local normal together. The normal is used to decide
 // when smoothing is a real edge-to-edge blend instead of an overlap artifact.
@@ -513,10 +521,20 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let fillMask = 1.0 - smoothstep(0.0, 1.4, distance);
   let gradient = sdfSample.gradient;
   let pixelWidth = max(fwidth(distance), 0.75);
-  let rimWidth = max(globals.specular.y, 0.0001);
-  let rimBandMask =
-    (1.0 - smoothstep(0.0, pixelWidth, distance)) *
-    (1.0 - smoothstep(rimWidth, rimWidth + pixelWidth, -distance));
+  let specularDistanceUnitsPerPx = max(
+    length(vec2f(dpdx(distance), dpdy(distance))),
+    SPECULAR_DISTANCE_SCALE_FLOOR,
+  );
+  let specularDistancePx = distance / specularDistanceUnitsPerPx;
+  let specularInwardDistancePx = max(-specularDistancePx, 0.0);
+  let rimWidthPx = max(globals.specular.y, 0.0001);
+  let specularOuterMask = 1.0 - smoothstep(0.0, SPECULAR_EDGE_FEATHER_PX, specularDistancePx);
+  let specularInnerMask = 1.0 - smoothstep(
+    rimWidthPx,
+    rimWidthPx + SPECULAR_EDGE_FEATHER_PX,
+    specularInwardDistancePx,
+  );
+  let rimBandMask = specularOuterMask * specularInnerMask;
   let rimNormal = gradient;
   let lightDir = normalize(
     select(vec2f(1.0, 0.0), globals.lighting.xy, dot(globals.lighting.xy, globals.lighting.xy) > 0.0001),
@@ -656,17 +674,18 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   }
 
   // White specular is a separate rim-only highlight driven by 2D normal/light alignment and
-  // then masked back to the configured rim band.
-  let primaryBandProgress = clamp(inwardDistance / max(globals.specular.y, pixelWidth), 0.0, 1.0);
+  // then masked back to the configured rim band. The mask uses derivative-scaled
+  // screen-pixel distance so smooth SDF blends do not stretch hairline highlights.
+  let primaryBandProgress = clamp(
+    specularInwardDistancePx / max(rimWidthPx, SPECULAR_EDGE_FEATHER_PX),
+    0.0,
+    1.0,
+  );
   let oppositeBandProgress = primaryBandProgress;
   let primaryStrength = globals.specular.x - globals.specularSecondary.y * primaryBandProgress * primaryBandProgress;
   let oppositeStrength =
     globals.specularSecondary.x - globals.specularSecondary.y * oppositeBandProgress * oppositeBandProgress;
-  let oppositeRimBandMask = 1.0 - smoothstep(
-    globals.specular.y,
-    globals.specular.y + pixelWidth,
-    inwardDistance,
-  );
+  let oppositeRimBandMask = rimBandMask;
   let rimSpecular = pow(max(dot(rimNormal, lightDir), 0.0), globals.specular.z);
   let mirroredRimSpecular = pow(max(dot(rimNormal, mirroredLightDir), 0.0), globals.specular.z);
   let primarySpecularOpacity = clamp(rimSpecular * primaryStrength, 0.0, 1.0);

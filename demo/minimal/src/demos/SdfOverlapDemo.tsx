@@ -17,7 +17,10 @@ import {
 
 const GLASS_WIDTH = 220
 const GLASS_HEIGHT = 132
+const GLASS_ORIGIN = { x: GLASS_WIDTH / 2, y: GLASS_HEIGHT / 2 }
 const INITIAL_DISTANCE = 34
+const INITIAL_SHAPE_SCALE_X = 1
+const INITIAL_SHAPE_SCALE_Y = 1
 const INITIAL_CONTAINER_SPACING = 12
 const INITIAL_BLUR = 7
 const INITIAL_BEZEL_WIDTH = 18
@@ -39,6 +42,8 @@ export default function SdfOverlapDemo() {
   const backgroundImageInputRef = useRef<HTMLInputElement | null>(null)
   const {
     distance,
+    shapeScaleX,
+    shapeScaleY,
     containerSpacing,
     blur,
     bezelWidth,
@@ -62,6 +67,20 @@ export default function SdfOverlapDemo() {
         max: 180,
         step: 1,
         label: 'Edge distance',
+      },
+      shapeScaleX: {
+        value: INITIAL_SHAPE_SCALE_X,
+        min: 0.25,
+        max: 50,
+        step: 0.01,
+        label: 'Scale X',
+      },
+      shapeScaleY: {
+        value: INITIAL_SHAPE_SCALE_Y,
+        min: 0.25,
+        max: 2.5,
+        step: 0.01,
+        label: 'Scale Y',
       },
       containerSpacing: {
         value: INITIAL_CONTAINER_SPACING,
@@ -173,7 +192,7 @@ export default function SdfOverlapDemo() {
     'Choose image': button(() => backgroundImageInputRef.current?.click()),
     'Clear image': button(clearBackgroundImage),
   }))
-  const centerOffset = (GLASS_WIDTH + distance) / 2
+  const centerOffset = (GLASS_WIDTH * shapeScaleX + distance) / 2
   const tintColor = hexToRgb(tintHex)
   const shadowColor = hexToRgb(shadowHex)
 
@@ -271,10 +290,20 @@ export default function SdfOverlapDemo() {
               specularOpacity={0.7}
             >
               <ZStack alignment="center">
-                <Transform x={-centerOffset}>
+                <Transform
+                  x={-centerOffset}
+                  scaleX={shapeScaleX}
+                  scaleY={shapeScaleY}
+                  origin={GLASS_ORIGIN}
+                >
                   <OverlapGlass cornerRadius={cornerRadius} />
                 </Transform>
-                <Transform x={centerOffset}>
+                <Transform
+                  x={centerOffset}
+                  scaleX={shapeScaleX}
+                  scaleY={shapeScaleY}
+                  origin={GLASS_ORIGIN}
+                >
                   <OverlapGlass cornerRadius={cornerRadius} />
                 </Transform>
               </ZStack>
