@@ -19,6 +19,7 @@ const GLASS_WIDTH = 220
 const GLASS_HEIGHT = 132
 const GLASS_ORIGIN = { x: GLASS_WIDTH / 2, y: GLASS_HEIGHT / 2 }
 const INITIAL_DISTANCE = 34
+const INITIAL_VERTICAL_OFFSET = 0
 const INITIAL_SHAPE_SCALE_X = 1
 const INITIAL_SHAPE_SCALE_Y = 1
 const INITIAL_CONTAINER_SPACING = 12
@@ -42,6 +43,7 @@ export default function SdfOverlapDemo() {
   const backgroundImageInputRef = useRef<HTMLInputElement | null>(null)
   const {
     distance,
+    verticalOffset,
     shapeScaleX,
     shapeScaleY,
     containerSpacing,
@@ -67,6 +69,13 @@ export default function SdfOverlapDemo() {
         max: 180,
         step: 1,
         label: 'Edge distance',
+      },
+      verticalOffset: {
+        value: INITIAL_VERTICAL_OFFSET,
+        min: -220,
+        max: 220,
+        step: 1,
+        label: 'Vertical offset',
       },
       shapeScaleX: {
         value: INITIAL_SHAPE_SCALE_X,
@@ -193,6 +202,7 @@ export default function SdfOverlapDemo() {
     'Clear image': button(clearBackgroundImage),
   }))
   const centerOffset = (GLASS_WIDTH * shapeScaleX + distance) / 2
+  const verticalCenterOffset = verticalOffset / 2
   const tintColor = hexToRgb(tintHex)
   const shadowColor = hexToRgb(shadowHex)
 
@@ -292,6 +302,7 @@ export default function SdfOverlapDemo() {
               <ZStack alignment="center">
                 <Transform
                   x={-centerOffset}
+                  y={-verticalCenterOffset}
                   scaleX={shapeScaleX}
                   scaleY={shapeScaleY}
                   origin={GLASS_ORIGIN}
@@ -300,6 +311,7 @@ export default function SdfOverlapDemo() {
                 </Transform>
                 <Transform
                   x={centerOffset}
+                  y={verticalCenterOffset}
                   scaleX={shapeScaleX}
                   scaleY={shapeScaleY}
                   origin={GLASS_ORIGIN}
