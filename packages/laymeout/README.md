@@ -1,11 +1,15 @@
 # laymeout
 
+## Description
+
 `laymeout` is a renderer-agnostic TypeScript layout engine inspired by SwiftUI's two-step layout model: parents propose a size, children report a size, then parents place children into rectangles.
 
-It does not render UI by itself. It gives you retained layout nodes with stable ids, mutable layout properties, measurement caching, and calculated geometry written directly to each node. Your DOM, Canvas, SVG, WebGL, native, or custom renderer owns the UI objects and reads `node.layout`.
+It does not render UI. It gives you retained layout nodes with stable ids, mutable layout properties, measurement caching, and calculated geometry written directly to each node. Your DOM, Canvas, SVG, WebGL, native, or custom renderer owns the visual objects and reads `node.layout`.
+
+## Install
 
 ```sh
-npm install laymeout
+pnpm add laymeout
 ```
 
 ## Quick Start
@@ -34,7 +38,27 @@ row.spacing = 20
 engine.layout({ width: 320, height: 56 })
 ```
 
-## Mental Model
+## API Overview
+
+### Layout Engine
+
+```ts
+import { createLayoutEngine } from 'laymeout'
+
+const engine = createLayoutEngine({
+  root,
+  onInvalidate: () => requestAnimationFrame(render),
+  maxCachedMeasurements: 50_000,
+})
+
+engine.root = root
+const stats = engine.layout({ width: 800 })
+engine.dispose()
+```
+
+`layout(proposal)` throws until `root` is assigned. It mutates reachable nodes by writing `node.layout`, then returns debug stats. Set `maxCachedMeasurements: 0` to disable measurement caching while profiling.
+
+### Retained Nodes
 
 Nodes are retained mutable objects. Builders such as `hstack`, `vstack`, `frame`, `padding`, and `leaf` return node instances with stable generated ids and property setters.
 
@@ -42,25 +66,109 @@ Nodes are retained mutable objects. Builders such as `hstack`, `vstack`, `frame`
 const row = hstack({ spacing: 8 })
 row.append(title, spacer(), button)
 
-const engine = createLayoutEngine({ root: row })
-
 row.spacing = 16
 engine.layout({ width: 800 })
 ```
 
 A node has one parent. Appending it to another parent automatically detaches it from the old parent, matching DOM parenting.
 
-Layout results are stored on nodes:
+Every node exposes:
+
+- `id`, `kind`, `parent`, `children`, and `layout`
+- `append`, `prepend`, `insertBefore`, `replaceChildren`, `remove`, and `dispose`
+
+`layout.rect` is relative to the parent layout node. Detached nodes keep their last layout until they are laid out again.
+
+### Leaves
+
+`leaf(spec)` creates a renderer-owned leaf. Leaves define their own measurement behavior.
 
 ```ts
-type NodeLayout = {
-  rect: Rect // relative to the parent layout node
-}
+const title = leaf({
+  measure: (proposal) => ({
+    width: proposal.width ?? 180,
+    height: 32,
+  }),
+  subscribe: (notify) => {
+    const unsubscribe = model.onChange(() => notify('model'))
+    return unsubscribe
+  },
+  measureKey: model.version,
+})
+
+title.invalidateMeasure('manual')
 ```
 
-Detached nodes keep their last `layout` until they are laid out again. `laymeout` does not add a generation counter; freshness tracking is userland's responsibility if your renderer needs it.
+Use `measureKey`, replace `measure`, or call `invalidateMeasure()` when measurement behavior changes outside a subscription.
 
-## Rendering Pattern
+### Built-In Layouts
+
+```ts
+import {
+  background,
+  defineLayout,
+  frame,
+  hstack,
+  leaf,
+  noop,
+  overlay,
+  padding,
+  spacer,
+  vstack,
+  zstack,
+} from 'laymeout'
+```
+
+- `hstack` and `vstack` place children along one axis with fixed spacing and cross-axis alignment.
+- `zstack` sizes to the maximum child width and height, then aligns each child inside that shared bounds.
+- `frame` proposes constraints to its child, clamps the reported size, and aligns the child inside the frame.
+- `padding` subtracts insets before measuring the child and adds them back to its own size.
+- `spacer` expands in finite proposals.
+- `noop` forwards the same proposal to its single child.
+- `background` and `overlay` place decorations in the content bounds without affecting parent layout.
+- `defineLayout` creates custom containers with explicit `measure` and `place` functions.
+
+### Custom Layouts
+
+```ts
+const flow = defineLayout({
+  kind: 'flow',
+  measure: ({ children, proposal }) => {
+    const sizes = children.map((child) => child.measure(proposal))
+    return {
+      width: sizes.reduce((sum, size) => sum + size.width, 0),
+      height: Math.max(0, ...sizes.map((size) => size.height)),
+    }
+  },
+  place: ({ bounds, children, proposal }) => {
+    let x = bounds.x
+    for (const child of children) {
+      const size = child.measure(proposal)
+      child.place({ x, y: bounds.y, width: size.width, height: size.height }, size)
+      x += size.width
+    }
+  },
+})
+```
+
+`place` is command-style: call `child.place(...)` directly. `bounds` is in the layout node's own local coordinate space, so direct child placements are parent-local rects.
+
+### DOM Helpers
+
+The `laymeout/dom` subpath provides `domLeaf`, `measureDomElement`, and `subscribeDomElement` for HTML element measurement.
+
+```ts
+import { domLeaf } from 'laymeout/dom'
+
+const node = domLeaf({
+  element,
+  sizing: 'intrinsic',
+})
+```
+
+`sizing` can be `intrinsic`, `constrained-width`, or `fill`.
+
+## Integration Notes
 
 Keep render metadata outside layout nodes. A UI object can hold a reference to its layout node:
 
@@ -85,262 +193,12 @@ function applyViewLayout(view: View) {
 }
 ```
 
-If your renderer skips layout-only intermediary nodes, accumulate ancestor offsets in userland or attach render groups to the intermediary layout nodes that own those coordinate boundaries. Child order, parentage, and traversal are already available from `node.children` and `node.parent`; `laymeout` does not emit a separate output graph.
+If your renderer skips layout-only intermediary nodes, accumulate ancestor offsets in userland or attach render groups to the intermediary layout nodes that own those coordinate boundaries.
 
-## Core API
-
-```ts
-import {
-  background,
-  createLayoutEngine,
-  defineLayout,
-  frame,
-  hstack,
-  leaf,
-  noop,
-  overlay,
-  padding,
-  spacer,
-  vstack,
-  zstack,
-} from 'laymeout'
-```
-
-### `createLayoutEngine(options?)`
-
-```ts
-const engine = createLayoutEngine({
-  root,
-  onInvalidate: () => requestAnimationFrame(render),
-  maxCachedMeasurements: 50_000,
-})
-
-engine.root = root
-const stats = engine.layout({ width: 800 })
-engine.dispose()
-```
-
-```ts
-type LayoutEngine = {
-  root: LayoutNode | undefined
-  layout(proposal: ProposedSize): LayoutDebugStats
-  getDebugStats(): LayoutDebugStats
-  dispose(): void
-}
-```
-
-`layout(proposal)` throws until `root` is assigned. It mutates reachable nodes by setting `node.layout`, then returns debug stats only.
-
-Set `maxCachedMeasurements: 0` to disable measurement caching for profiling.
-
-### Retained Nodes
-
-```ts
-type LayoutNode = {
-  readonly id: string
-  readonly kind: string
-  readonly parent: LayoutNode | null
-  readonly children: readonly LayoutNode[]
-  readonly layout: NodeLayout | undefined
-
-  append(...children: LayoutNode[]): void
-  prepend(...children: LayoutNode[]): void
-  insertBefore(child: LayoutNode, before: LayoutNode): void
-  replaceChildren(...children: LayoutNode[]): void
-  remove(): void
-  dispose(): void
-}
-```
-
-Ids are generated internally and remain stable for the node lifetime. Core layout identity is the node object, not a user key.
-
-### `leaf(spec)`
-
-Creates a renderer-owned leaf. Leaves define their own measurement behavior.
-
-```ts
-const title = leaf({
-  measure: (proposal, node) => ({
-    width: proposal.width ?? 180,
-    height: 32,
-  }),
-  subscribe: (notify, node) => {
-    const unsubscribe = model.onChange(() => notify('model'))
-    return unsubscribe
-  },
-  measureKey: model.version,
-})
-
-title.invalidateMeasure('manual')
-```
-
-```ts
-type LeafSpec = {
-  measure: (proposal: ProposedSize, node: LeafNode) => Size
-  subscribe?: (notify: (cause?: unknown) => void, node: LeafNode) => void | (() => void)
-  measureKey?: unknown
-}
-```
-
-The engine owns subscriptions for reachable leaves. When a subscription calls `notify(cause)`, the leaf and ancestors are marked dirty, `onInvalidate` runs, and cached measurements affected by that leaf are bypassed on the next layout.
-
-If measurement behavior changes outside a subscription, update `measureKey`, replace `measure`, or call `invalidateMeasure()`.
-
-### Stacks
-
-```ts
-const row = hstack({ spacing: 8, alignment: 'center' }, left, spacer(), right)
-const column = vstack({ spacing: 12, alignment: 'leading' }, title, body)
-
-row.spacing = 16
-column.alignment = 'trailing'
-```
-
-Stacks measure children along their main axis with fixed spacing. `spacer()` expands in finite proposals.
-
-Stack alignment is cross-axis only:
-
-```ts
-type StackAlignment = 'start' | 'center' | 'end' | 'leading' | 'trailing' | 'top' | 'bottom'
-```
-
-### `zstack`
-
-```ts
-const badge = zstack({ alignment: 'bottomTrailing' }, card, pill)
-badge.alignment = 'topTrailing'
-```
-
-`zstack` sizes to the maximum child width and height, then places each child inside that shared bounds using `alignment`.
-
-### `frame`
-
-```ts
-const framed = frame(child, {
-  width: 240,
-  minHeight: 48,
-  maxWidth: 'infinity',
-  alignment: 'bottomTrailing',
-})
-
-framed.width = 320
-framed.alignment = 'center'
-```
-
-`frame` modifies the proposal sent to its child, clamps its reported size, and places the child within the frame bounds.
-
-### `padding`
-
-```ts
-const padded = padding(child, { horizontal: 16, vertical: 10 })
-padded.insets = 24
-```
-
-Insets can be a number, `{ top, right, bottom, left }`, or `{ horizontal, vertical }`. Padding subtracts insets before measuring the child, then adds them back to its own measured size.
-
-### `noop`
-
-```ts
-const passthrough = noop(child)
-```
-
-`noop` is a single-child layout node that forwards the same proposal to its child and places the child into the same parent-local bounds.
-
-### `background` and `overlay`
-
-```ts
-const withBackground = background(content, backgroundNode)
-const withOverlay = overlay(content, overlayNode, { alignment: 'topTrailing' })
-```
-
-These are layout nodes whose content child determines size. The decoration is placed into the content bounds and does not affect parent layout. Paint order is renderer-owned; the engine only preserves structural children.
-
-### `defineLayout`
-
-Use `defineLayout` for custom containers. `place` is command-style: call `child.place(...)` directly. `bounds` is in the layout node's own local coordinate space, so direct child placements are parent-local rects.
-
-```ts
-const flow = defineLayout(
-  {
-    kind: 'flow',
-    measure: ({ children, proposal }) => {
-      const sizes = children.map((child) => child.measure(proposal))
-      return {
-        width: sizes.reduce((sum, size) => sum + size.width, 0),
-        height: Math.max(0, ...sizes.map((size) => size.height)),
-      }
-    },
-    place: ({ bounds, children, proposal }) => {
-      let x = bounds.x
-      for (const child of children) {
-        const size = child.measure(proposal)
-        child.place({ x, y: bounds.y, width: size.width, height: size.height }, size)
-        x += size.width
-      }
-    },
-  },
-  first,
-  second,
-)
-```
-
-## DOM Adapter
-
-```ts
-import { domLeaf } from 'laymeout/dom'
-```
-
-`domLeaf` creates a retained measured leaf from an existing `HTMLElement`.
-
-```ts
-const titleNode = domLeaf({ element: titleEl, sizing: 'constrained-width' })
-const actionNode = domLeaf({ element: buttonEl })
-```
-
-```ts
-type DomLeafOptions = {
-  element: HTMLElement
-  sizing?: 'intrinsic' | 'constrained-width' | 'fill'
-  measureKey?: unknown
-}
-```
-
-Measurement uses an offscreen clone so the live element is not mutated during the measure phase. `intrinsic` preserves the element's authored size. `constrained-width` accepts the proposed width and lets height resolve naturally, which is useful for text wrapping; if no width is proposed, it preserves authored width. `fill` accepts proposed width and height when either axis is available, falling back to intrinsic measurement for missing axes.
-
-The DOM adapter subscribes with `ResizeObserver`, image load/error events, `document.fonts` where available, and DOM mutations that commonly affect intrinsic size. It only invalidates measurement; applying `node.layout` to elements is up to your renderer.
-
-## Caching And Stats
-
-The engine caches measurements by node id, proposal, node revision, subtree revision, and `measureKey`. Placement is recomputed every layout pass.
-
-```ts
-type LayoutDebugStats = {
-  measureCalls: number
-  cacheHits: number
-  cacheMisses: number
-  invalidations: number
-  activeSubscriptions: number
-  nodes: number
-}
-```
-
-`nodes` is the number of nodes placed in the last layout. `invalidations` is cumulative for the engine lifetime.
-
-## Scripts
+## Local Development
 
 ```sh
-npm run dev
-npm run typecheck
-npm run test
-npm run build
-npm run playground:build
-npm run pack:dry-run
+pnpm --filter laymeout build
+pnpm --filter laymeout test
+pnpm --filter laymeout typecheck
 ```
-
-The package builds ESM, CJS, and declarations with `tsup`. The playground is development-only and excluded from published package files.
-
-Before publishing, re-check package-name availability with `npm view laymeout`.
-
-## License
-
-MIT
