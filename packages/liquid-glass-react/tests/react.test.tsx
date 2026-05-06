@@ -26,8 +26,8 @@ import {
   type GlassContainerRef,
   type OverlayRef,
   type VStackRef,
-} from '../src/react'
-import { flattenGlassHtml } from '../src/scene'
+} from '../src'
+import { flattenGlassHtml } from '../../liquid-glass-dom/src/scene'
 
 const rendererState = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -39,7 +39,7 @@ const rendererState = vi.hoisted(() => ({
   }>,
 }))
 
-vi.mock('../src/renderer', () => {
+vi.mock('liquid-glass-dom', () => {
   class Renderer {
     scene: unknown
     maxDpr: number
@@ -56,6 +56,10 @@ vi.mock('../src/renderer', () => {
 
   return { Renderer }
 })
+
+vi.mock('liquid-glass-dom/layout', async () => (
+  vi.importActual<typeof import('../../liquid-glass-dom/src/layout')>('../../liquid-glass-dom/src/layout')
+))
 
 let frameCallbacks: Map<number, FrameRequestCallback>
 let frameId: number

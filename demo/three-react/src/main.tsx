@@ -30,7 +30,7 @@ import {
   Transform,
   ZStack,
   type LayoutSceneRootRef,
-} from 'liquid-glass-dom/react'
+} from 'liquid-glass-react'
 import { ThreeGlassRenderer } from 'liquid-glass-three'
 
 const GLASS_WIDTH = 260

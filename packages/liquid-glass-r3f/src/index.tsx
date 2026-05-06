@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { useFrame, useThree, type RootState } from '@react-three/fiber'
 import { WebGpuDomContentSource } from 'liquid-glass-dom'
-import { LayoutSceneRoot, type LayoutSceneRootRef } from 'liquid-glass-dom/react'
+import { LayoutSceneRoot, type LayoutSceneRootRef } from 'liquid-glass-react'
 import {
   ThreeGlassRenderer,
   requireThreeWebGpuRenderTargetRenderer,

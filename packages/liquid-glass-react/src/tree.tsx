@@ -21,7 +21,7 @@ import {
   Padding as LayoutPadding,
   Transform as LayoutTransform,
   type LayoutUiNode,
-} from '../layout'
+} from 'liquid-glass-dom/layout'
 import type {
   ChildRegistrar,
   ChildrenProp,
@@ -132,7 +132,7 @@ function OrderedChildren({ children }: ChildrenProp) {
 export function useRequiredRoot() {
   const root = useContext(RootContext)
   if (!root) {
-    throw new Error('liquid-glass-dom/react components must be rendered inside LayoutCanvas or LayoutSceneRoot.')
+    throw new Error('liquid-glass-react components must be rendered inside LayoutCanvas or LayoutSceneRoot.')
   }
   return root
 }

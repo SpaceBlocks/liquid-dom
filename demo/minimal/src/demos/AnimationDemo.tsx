@@ -15,7 +15,7 @@ import {
   useTimeline,
   type GlassContainerRef,
   type TransformRef,
-} from 'liquid-glass-dom/react'
+} from 'liquid-glass-react'
 
 const CARD_WIDTH = 142
 const CARD_HEIGHT = 104

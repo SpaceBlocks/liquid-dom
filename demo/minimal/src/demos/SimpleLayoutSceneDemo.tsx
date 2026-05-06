@@ -13,7 +13,7 @@ import {
   ZStack,
   useFrame,
   type TransformRef,
-} from 'liquid-glass-dom/react'
+} from 'liquid-glass-react'
 
 const CARD_WIDTH = 156
 const CARD_HEIGHT = 96

@@ -15,11 +15,6 @@
       "types": "./dist/layout.d.ts",
       "import": "./dist/layout.js",
       "require": "./dist/layout.cjs"
-    },
-    "./react": {
-      "types": "./dist/react.d.ts",
-      "import": "./dist/react.js",
-      "require": "./dist/react.cjs"
     }
   },
   "files": [
@@ -34,17 +29,9 @@
   "dependencies": {
     "laymeout": "workspace:*"
   },
-  "peerDependencies": {
-    "react": ">=19",
-    "react-dom": ">=19"
-  },
   "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
     "@webgpu/types": "^0.1.69",
     "jsdom": "^27.2.0",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
     "tsup": "^8.5.0",
     "typescript": "~6.0.2",
     "vitest": "^4.0.15"

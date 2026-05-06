@@ -1,5 +1,5 @@
 import type { CSSProperties, MutableRefObject, ReactNode, Ref } from 'react'
-import type { GlassPointerEvent } from '../events'
+import type { GlassPointerEvent, Renderer } from 'liquid-glass-dom'
 import type {
   AnimateFunction,
   AnimationConfig,
@@ -26,8 +26,7 @@ import type {
   HtmlOptions,
   LayoutUiNode,
   TransformOptions,
-} from '../layout'
-import type { Renderer } from '../renderer'
+} from 'liquid-glass-dom/layout'
 import type {
   DecorationOptions,
   FrameOptions,

@@ -13,7 +13,7 @@ import {
   Transform as LayoutTransform,
   VStack as LayoutVStack,
   ZStack as LayoutZStack,
-} from '../layout'
+} from 'liquid-glass-dom/layout'
 import type {
   BackgroundProps,
   GlassPointerHandler,
@@ -29,7 +29,7 @@ import type {
   VStackProps,
   ZStackProps,
 } from './types'
-import type { GlassOptions } from '../layout'
+import type { GlassOptions } from 'liquid-glass-dom/layout'
 import { useAnimatedProps } from './animatedProps'
 import {
   renderNodeChildren,

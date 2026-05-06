@@ -77,7 +77,7 @@ import {
 } from 'liquid-glass-dom'
 ```
 
-React 19 bindings are available from the `react` subpath:
+React 19 bindings are available from the `liquid-glass-react` package:
 
 ```tsx
 import {
@@ -91,7 +91,7 @@ import {
   useAnimate,
   useTimeline,
   type GlassRef,
-} from 'liquid-glass-dom/react'
+} from 'liquid-glass-react'
 ```
 
 ## React Animation

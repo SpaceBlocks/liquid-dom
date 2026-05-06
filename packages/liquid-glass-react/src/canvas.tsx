@@ -9,8 +9,8 @@ import {
   type CSSProperties,
   type MutableRefObject,
 } from 'react'
-import { LayoutScene } from '../layout'
-import { Renderer } from '../renderer'
+import { Renderer } from 'liquid-glass-dom'
+import { LayoutScene } from 'liquid-glass-dom/layout'
 import { AnimationManager, AnimationTimeline, type AnimationConfig } from './animation'
 import type {
   AnimateFunction,

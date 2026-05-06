@@ -17,7 +17,7 @@ import {
   Html,
   Transform,
   ZStack,
-} from 'liquid-glass-dom/react'
+} from 'liquid-glass-react'
 
 declare module '@react-three/fiber' {
   interface ThreeElements extends ThreeToJSXElements<typeof THREE> {}

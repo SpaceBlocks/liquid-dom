@@ -12,7 +12,7 @@ export default defineConfig({
   external: [
     '@react-three/fiber',
     'liquid-glass-dom',
-    'liquid-glass-dom/react',
+    'liquid-glass-react',
     'liquid-glass-three',
     'react',
     'three',

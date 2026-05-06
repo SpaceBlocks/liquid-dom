@@ -8,7 +8,7 @@ import {
   LayoutCanvas,
   Transform,
   ZStack,
-} from 'liquid-glass-dom/react'
+} from 'liquid-glass-react'
 import {
   deleteStoredBackgroundImage,
   loadStoredBackgroundImage,
