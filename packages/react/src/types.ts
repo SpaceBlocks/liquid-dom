@@ -154,10 +154,13 @@ export type BackgroundProps = ChildrenProp & RefProp<BackgroundRef> & Decoration
 }
 export type TransformProps = ChildrenProp & RefProp<TransformRef> & TransformOptions & TransitionProp<TransformOptions>
 export type GlassContainerProps = ChildrenProp & RefProp<GlassContainerRef> & GlassContainerOptions & TransitionProp<GlassContainerOptions>
+export type GlassStateHandler = (active: boolean) => void
 export type GlassPointerHandler = (event: GlassPointerEvent) => void
 export type GlassProps = ChildrenProp & RefProp<GlassRef> & GlassOptions & TransitionProp<GlassOptions> & {
   whileHover?: Partial<GlassOptions>
   whilePress?: Partial<GlassOptions>
+  onHover?: GlassStateHandler
+  onPress?: GlassStateHandler
   onClick?: GlassPointerHandler
   onPointerEnter?: GlassPointerHandler
   onPointerLeave?: GlassPointerHandler

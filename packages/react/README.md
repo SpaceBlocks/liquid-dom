@@ -122,6 +122,20 @@ For example, a `Glass` nested under `Frame` or `Transform` inside another `Glass
 
 `whilePress` takes precedence over `whileHover` when both provide the same prop. These props imply `pointerEvents={true}` unless `pointerEvents={false}` is set explicitly.
 
+`onHover` and `onPress` receive the same interaction state as booleans. They are useful when the interaction should drive a parent or sibling component:
+
+```tsx
+const [pressed, setPressed] = useState(false)
+
+<Transform
+  scaleX={pressed ? 0.96 : 1}
+  scaleY={pressed ? 0.96 : 1}
+  transition={{ scaleX: spring(), scaleY: spring() }}
+>
+  <Glass onPress={setPressed} />
+</Transform>
+```
+
 ### Animation
 
 ```tsx

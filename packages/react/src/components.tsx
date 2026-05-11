@@ -343,6 +343,8 @@ export function Glass({
   pointerEvents,
   zIndex,
   onClick,
+  onHover,
+  onPress,
   onPointerEnter,
   onPointerLeave,
   onPointerMove,
@@ -355,10 +357,14 @@ export function Glass({
 }: GlassProps) {
   const [hovered, setHovered] = useState(false)
   const [pressed, setPressed] = useState(false)
+  const hoveredRef = useRef(false)
+  const pressedRef = useRef(false)
   const baseFallbackRef = useRef<Partial<GlassOptions>>({})
   const hasInteraction = hasInteractionProps(whileHover) || hasInteractionProps(whilePress)
   const hasPointerHandler = Boolean(
     onClick ||
+    onHover ||
+    onPress ||
     onPointerEnter ||
     onPointerLeave ||
     onPointerMove ||
@@ -384,28 +390,48 @@ export function Glass({
   useAnimatedProps(node, resolvedProps, transition, { assignUndefined: false })
 
   useEffect(() => {
+    const setHoverState = (nextHovered: boolean) => {
+      if (hoveredRef.current === nextHovered) {
+        return
+      }
+
+      hoveredRef.current = nextHovered
+      setHovered(nextHovered)
+      onHover?.(nextHovered)
+    }
+
+    const setPressState = (nextPressed: boolean) => {
+      if (pressedRef.current === nextPressed) {
+        return
+      }
+
+      pressedRef.current = nextPressed
+      setPressed(nextPressed)
+      onPress?.(nextPressed)
+    }
+
     const listeners: Array<[string, GlassPointerHandler | undefined]> = [
       ['click', onClick],
-      ['pointerenter', hasInteraction || onPointerEnter ? (event) => {
-        setHovered(true)
+      ['pointerenter', hasInteraction || onHover || onPointerEnter ? (event) => {
+        setHoverState(true)
         onPointerEnter?.(event)
       } : undefined],
-      ['pointerleave', hasInteraction || onPointerLeave ? (event) => {
-        setHovered(false)
-        setPressed(false)
+      ['pointerleave', hasInteraction || onHover || onPress || onPointerLeave ? (event) => {
+        setHoverState(false)
+        setPressState(false)
         onPointerLeave?.(event)
       } : undefined],
       ['pointermove', onPointerMove],
-      ['pointerdown', hasInteraction || onPointerDown ? (event) => {
-        setPressed(true)
+      ['pointerdown', hasInteraction || onPress || onPointerDown ? (event) => {
+        setPressState(true)
         onPointerDown?.(event)
       } : undefined],
-      ['pointerup', hasInteraction || onPointerUp ? (event) => {
-        setPressed(false)
+      ['pointerup', hasInteraction || onPress || onPointerUp ? (event) => {
+        setPressState(false)
         onPointerUp?.(event)
       } : undefined],
-      ['pointercancel', hasInteraction || onPointerCancel ? (event) => {
-        setPressed(false)
+      ['pointercancel', hasInteraction || onPress || onPointerCancel ? (event) => {
+        setPressState(false)
         onPointerCancel?.(event)
       } : undefined],
     ]
@@ -427,6 +453,8 @@ export function Glass({
     node,
     hasInteraction,
     onClick,
+    onHover,
+    onPress,
     onPointerEnter,
     onPointerLeave,
     onPointerMove,

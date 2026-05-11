@@ -48,6 +48,7 @@ export type {
   GlassPointerHandler,
   GlassProps,
   GlassRef,
+  GlassStateHandler,
   HStackProps,
   HStackRef,
   HtmlProps,

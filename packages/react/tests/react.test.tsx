@@ -474,6 +474,43 @@ describe('React layout components', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
+  it('reports Glass hover and press state callbacks', async () => {
+    const glassRef = createRef<GlassRef>()
+    const onHover = vi.fn()
+    const onPress = vi.fn()
+
+    await renderReact(
+      <LayoutCanvas frameloop="demand" proposal={{ width: 320, height: 200 }}>
+        <GlassContainer>
+          <Glass ref={glassRef} onHover={onHover} onPress={onPress}>
+            <FixedHtml width={10} height={10} />
+          </Glass>
+        </GlassContainer>
+      </LayoutCanvas>,
+    )
+
+    expect(glassRef.current?.pointerEvents).toBe(true)
+
+    act(() => {
+      glassRef.current?.sceneNode.dispatchEvent(new Event('pointerenter'))
+    })
+    expect(onHover).toHaveBeenLastCalledWith(true)
+
+    act(() => {
+      glassRef.current?.sceneNode.dispatchEvent(new Event('pointerdown'))
+    })
+    expect(onPress).toHaveBeenLastCalledWith(true)
+
+    act(() => {
+      glassRef.current?.sceneNode.dispatchEvent(new Event('pointerleave'))
+    })
+    expect(onHover).toHaveBeenLastCalledWith(false)
+    expect(onPress).toHaveBeenLastCalledWith(false)
+
+    expect(onHover).toHaveBeenCalledTimes(2)
+    expect(onPress).toHaveBeenCalledTimes(2)
+  })
+
   it('applies Glass whileHover and whilePress props through transitions', async () => {
     const glassRef = createRef<GlassRef>()
 
