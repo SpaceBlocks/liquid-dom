@@ -38,6 +38,7 @@ export interface GlassEventMap {
  * Constructor options for a {@link Container}.
  */
 export type ContainerInit = Partial<Transform> & {
+  opacity?: number
   spacing?: number
   blur?: number
   bezelWidth?: number
@@ -569,6 +570,8 @@ export class Container implements Transform {
   /** Local-space transform origin in CSS pixels. */
   origin: Point = { x: 0, y: 0 }
 
+  /** Overall compositing opacity for the container's glass and shadow. */
+  opacity = 1
   /** Fusion distance used when blending neighboring shapes in CSS pixels. */
   spacing = 42.5
   /** Backdrop blur radius in CSS pixels. */
@@ -643,6 +646,9 @@ export class Container implements Transform {
   constructor(options: ContainerInit = {}) {
     applyTransformDefaults(this, options)
 
+    if (options.opacity !== undefined) {
+      this.opacity = options.opacity
+    }
     if (options.spacing !== undefined) {
       this.spacing = options.spacing
     }

@@ -414,7 +414,8 @@ ${FULLSCREEN_VERTEX}
 fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let sceneColor = textureSampleLevel(sceneTexture, shadowSampler, in.uv, 0.0);
   let shadowMask = textureSampleLevel(shadowMaskTexture, shadowSampler, in.uv, 0.0).a;
-  let shadowOpacity = clamp(shadowMask * globals.shadowColor.a, 0.0, 1.0);
+  let containerOpacity = clamp(globals.container.x, 0.0, 1.0);
+  let shadowOpacity = clamp(shadowMask * globals.shadowColor.a * containerOpacity, 0.0, 1.0);
   let color = mix(sceneColor.rgb, globals.shadowColor.rgb, shadowOpacity);
 
   return vec4f(color, sceneColor.a);
@@ -496,6 +497,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   let shapeCount = u32(globals.shape.z);
   let fragCoord = in.uv * globals.canvas.xy;
   let background = sampleBackgroundSharp(in.uv);
+  let containerOpacity = clamp(globals.container.x, 0.0, 1.0);
 
   let sdfSample = sceneSdfSample(fragCoord, shapeCount, globals.shape.x);
   let distance = sdfSample.distance;
@@ -568,7 +570,8 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     // Signed pixel displacement is centered at 0.5 for display in the color target:
     // red/green hold x/y displacement, blue stays zero.
     let debugDisplacement = displacementPxGreen * DEBUG_DISPLACEMENT_ENCODE_SCALE + vec2f(0.5);
-    return vec4f(mix(background, vec3f(debugDisplacement, 0.0), fillMask), 1.0);
+    let debugColor = mix(background, vec3f(debugDisplacement, 0.0), fillMask);
+    return vec4f(mix(background, debugColor, containerOpacity), 1.0);
   }
   let contentBaseIor = max(globals.content.x, 1.0001);
   let contentRefractedRayRed = refract(
@@ -687,7 +690,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
     color = color + whiteSpecular;
   }
 
-  return vec4f(color, 1.0);
+  return vec4f(mix(background, color, containerOpacity), 1.0);
 }
 `
 

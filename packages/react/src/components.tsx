@@ -188,6 +188,7 @@ export function Transform({
 export function GlassContainer({
   ref,
   children,
+  opacity,
   spacing,
   blur,
   bezelWidth,
@@ -221,6 +222,7 @@ export function GlassContainer({
 }: GlassContainerProps) {
   const node = useStableNode(() => new LayoutGlassContainer({
     spacing,
+    opacity,
     blur,
     bezelWidth,
     thickness,
@@ -254,6 +256,7 @@ export function GlassContainer({
   useAttachNode(node)
   useAnimatedProps(node, {
     spacing,
+    opacity,
     blur,
     bezelWidth,
     thickness,

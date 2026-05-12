@@ -386,6 +386,9 @@ export class WebGpuGlassCore {
         width: this.width,
         height: this.height,
       },
+      container: {
+        opacity: container.opacity,
+      },
       shape: {
         smoothing: container.spacing * dpr,
         bezelWidth: container.bezelWidth * dpr,
@@ -560,6 +563,7 @@ export class WebGpuGlassCore {
     targetContainer: Container,
   ) {
     if (
+      targetContainer.opacity <= 0 ||
       targetContainer.shadowColor.a <= 0 ||
       !this.shapesBuffer?.buffer ||
       !this.targets
@@ -606,7 +610,10 @@ export class WebGpuGlassCore {
 
   /** Returns whether rendering this container will add a shadow composition pass. */
   private shouldRenderShadow(targetContainer: Container) {
-    return targetContainer.shadowColor.a > 0 && Boolean(this.shapesBuffer?.buffer) && Boolean(this.targets)
+    return targetContainer.opacity > 0 &&
+      targetContainer.shadowColor.a > 0 &&
+      Boolean(this.shapesBuffer?.buffer) &&
+      Boolean(this.targets)
   }
 
   /** Renders and queues copy commands for one backdrop metrics target. */
@@ -800,6 +807,9 @@ export class WebGpuGlassCore {
         continue
       }
 
+      if (entry.child.opacity <= 0) {
+        continue
+      }
       const packedShapes = this.packShapes(entry.child, entry.transform)
       this.writeGlobals(entry.child, packedShapes.shapeCount)
       const blurRadiusPx = entry.child.blur * this.currentDpr

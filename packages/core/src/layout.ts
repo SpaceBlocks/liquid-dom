@@ -920,6 +920,16 @@ export class GlassContainer extends SingleChildUiNode<RetainedLayoutNode, SceneC
     super(createNoop(), new SceneContainer(options))
   }
 
+  get opacity(): number {
+    return this.sceneNode.opacity
+  }
+
+  set opacity(value: number) {
+    if (setProperty(this.sceneNode, 'opacity', value)) {
+      this.invalidateFrame('opacity')
+    }
+  }
+
   get spacing(): number {
     return this.sceneNode.spacing
   }
