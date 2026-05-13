@@ -471,7 +471,8 @@ fn sampleGlassContentAtlas(content: ContentData, localPos: vec2f) -> vec4f {
   }
 
   let atlasUv = content.atlasRect.xy + localPos * content.atlasRect.zw;
-  return textureSampleLevel(glassContentTexture, backgroundSampler, atlasUv, 0.0);
+  let contentColor = textureSampleLevel(glassContentTexture, backgroundSampler, atlasUv, 0.0);
+  return vec4f(contentColor.rgb, contentColor.a * clamp(content.opacity.x, 0.0, 1.0));
 }
 
 fn sampleGlassContentEntry(
@@ -773,6 +774,7 @@ fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
   }
 
   let htmlColor = textureSampleLevel(htmlTexture, compositeSampler, localPos * params.canvas.zw, 0.0);
-  return vec4f(mix(sceneColor.rgb, htmlColor.rgb, htmlColor.a), 1.0);
+  let htmlAlpha = htmlColor.a * clamp(params.opacity.x, 0.0, 1.0);
+  return vec4f(mix(sceneColor.rgb, htmlColor.rgb, htmlAlpha), 1.0);
 }
 `

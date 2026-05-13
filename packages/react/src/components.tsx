@@ -473,11 +473,13 @@ export function Glass({
 export function Html({
   ref,
   children,
+  opacity,
   zIndex,
   sizing,
   transition,
 }: HtmlProps) {
   const node = useStableNode(() => new LayoutHtml({
+    opacity,
     zIndex,
     sizing,
   }))
@@ -485,7 +487,7 @@ export function Html({
   useAttachNode(node)
 
   useAnimatedProps(node, { sizing }, transition)
-  useAnimatedProps(node, { zIndex }, transition, { assignUndefined: false })
+  useAnimatedProps(node, { opacity, zIndex }, transition, { assignUndefined: false })
 
   return node.element ? createPortal(children, node.element) : null
 }

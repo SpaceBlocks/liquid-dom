@@ -8,6 +8,7 @@ import type { Point, RgbaColor, SpecularWidth, SurfaceProfile, Transform } from 
 export type HtmlInit = Partial<Transform> & {
   width?: number
   height?: number
+  opacity?: number
   zIndex?: number
   element?: HTMLElement | null
 }
@@ -271,6 +272,7 @@ export class Html implements Transform {
 
   private _width = 0
   private _height = 0
+  private _opacity = 1
   private _zIndex = 0
   private _element: HTMLElement | null = null
   _elementVersion = 0
@@ -298,6 +300,9 @@ export class Html implements Transform {
       this.height = options.height
     } else {
       this.syncHostSize()
+    }
+    if (options.opacity !== undefined) {
+      this.opacity = options.opacity
     }
     if (options.zIndex !== undefined) {
       this.zIndex = options.zIndex
@@ -334,6 +339,20 @@ export class Html implements Transform {
 
     this._height = value
     this.syncHostSize()
+    notifySceneMutation(this)
+  }
+
+  /** Final opacity used when compositing this HTML node into the rendered scene. */
+  get opacity() {
+    return this._opacity
+  }
+
+  set opacity(value: number) {
+    if (this._opacity === value) {
+      return
+    }
+
+    this._opacity = value
     notifySceneMutation(this)
   }
 

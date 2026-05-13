@@ -714,6 +714,9 @@ export class DomContentSync {
           uScale: getTextureUvScale(entry.deviceWidth, entry.width, this.glassContentAtlasWidth),
           vScale: getTextureUvScale(entry.deviceHeight, entry.height, this.glassContentAtlasHeight),
         },
+        opacity: {
+          value: entry.html.opacity,
+        },
       })
     }
 

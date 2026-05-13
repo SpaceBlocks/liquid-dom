@@ -734,6 +734,9 @@ export class WebGpuGlassCore {
         f: inverse.f,
         copiedHeight: getCopiedCssSize(entry.copiedDeviceHeight, entry.deviceHeight, entry.height),
       },
+      opacity: {
+        value: entry.html.opacity,
+      },
     })
   }
 
@@ -797,6 +800,10 @@ export class WebGpuGlassCore {
 
     for (const entry of layers) {
       if (entry.child instanceof Html) {
+        if (entry.child.opacity <= 0) {
+          continue
+        }
+
         const htmlEntry = this.contentSource?.getSceneHtmlEntry?.(entry.child)
         if (!htmlEntry || !htmlEntry.texture || !htmlEntry.inverseTransform) {
           continue

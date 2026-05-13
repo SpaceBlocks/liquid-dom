@@ -35,6 +35,7 @@ export const ContentDataLayout = structLayout({
   inverse0: vec4('a', 'c', 'e', 'copiedWidth'),
   inverse1: vec4('b', 'd', 'f', 'copiedHeight'),
   atlasRect: vec4('u', 'v', 'uScale', 'vScale'),
+  opacity: vec4('value'),
 })
 
 /** Uniform layout for the bounds sampled by the backdrop metrics shader. */
@@ -47,4 +48,5 @@ export const HtmlCompositeParamsLayout = structLayout({
   canvas: vec4('width', 'height', 'uScale', 'vScale'),
   inverse0: vec4('a', 'c', 'e', 'copiedWidth'),
   inverse1: vec4('b', 'd', 'f', 'copiedHeight'),
+  opacity: vec4('value'),
 })

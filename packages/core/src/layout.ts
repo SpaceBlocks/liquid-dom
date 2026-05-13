@@ -102,6 +102,8 @@ export type GlassOptions = Omit<GlassInit, keyof SceneTransform | 'width' | 'hei
 
 /** Constructor options for {@link Html}. */
 export type HtmlOptions = {
+  /** Final opacity used when compositing this HTML node into the rendered scene. */
+  opacity?: number
   /** Scene draw order among sibling scene or glass HTML nodes. */
   zIndex?: number
   /** Measured content element rendered inside the layout-owned scene HTML host. */
@@ -1290,6 +1292,7 @@ export class Html extends UiNode<LeafNode, SceneHtml> {
     const sizing = options.sizing ?? 'constrained-width'
     syncOwnedHtmlElementSizing(ownedElement, sizing)
     const sceneNode = new SceneHtml({
+      opacity: options.opacity,
       zIndex: options.zIndex,
       element: contentElement,
     })
@@ -1326,6 +1329,16 @@ export class Html extends UiNode<LeafNode, SceneHtml> {
     syncOwnedHtmlElementSizing(this.ownedElement, nextSizing)
     this.layoutNode.invalidateMeasure('sizing')
     this.invalidateLayout('sizing')
+  }
+
+  get opacity(): number {
+    return this.sceneNode.opacity
+  }
+
+  set opacity(value: number) {
+    if (setProperty(this.sceneNode, 'opacity', value)) {
+      this.invalidateFrame('opacity')
+    }
   }
 
   get zIndex(): number {
