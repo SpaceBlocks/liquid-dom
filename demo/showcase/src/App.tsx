@@ -1,6 +1,7 @@
 import { type ComponentType, type CSSProperties, useState } from 'react'
 import { Leva } from 'leva'
 import SdfOverlapDemo from '../../minimal/src/demos/SdfOverlapDemo'
+import ControlCenterDemo from './demos/ControlCenterDemo'
 import IosNotificationDemo from './demos/IosNotificationDemo'
 import MusicSidebarDemo from './demos/MusicSidebarDemo'
 import NotificationCenterDemo from './demos/NotificationCenterDemo'
@@ -22,6 +23,7 @@ const showcases: Showcase[] = [
   { id: 'ios-notification', label: 'Notification', Component: IosNotificationDemo },
   { id: 'video-controls', label: 'Video Controls', Component: VideoControlsDemo },
   { id: 'music-sidebar', label: 'Music Sidebar', Component: MusicSidebarDemo },
+  { id: 'control-center', label: 'Control Center', Component: ControlCenterDemo },
   {
     id: 'notification-center',
     label: 'Notification Center',
