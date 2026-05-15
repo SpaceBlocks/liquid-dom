@@ -13,6 +13,9 @@ import {
   Overlay,
   VStack,
   ZStack,
+  AnimationManager,
+  Easing,
+  easing,
   spring,
   useAnimate,
   useFrame,
@@ -151,6 +154,182 @@ function FixedHtml({
 }
 
 describe('React layout components', () => {
+  it('interprets spring velocity as speed toward the target', () => {
+    const manager = new AnimationManager()
+    const increasingTarget = { value: 0 }
+    const decreasingTarget = { value: 100 }
+    const transition = spring({
+      stiffness: 0,
+      damping: 0,
+      velocity: 100,
+      restDelta: 0,
+      restSpeed: 0,
+    })
+
+    manager.animate(increasingTarget, { value: 100 }, transition)
+    manager.animate(decreasingTarget, { value: 0 }, transition)
+    manager.tick(100)
+
+    expect(increasingTarget.value).toBeGreaterThan(0)
+    expect(decreasingTarget.value).toBeLessThan(100)
+  })
+
+  it('treats negative spring velocity as speed magnitude toward the target', () => {
+    const manager = new AnimationManager()
+    const target = { value: 100 }
+
+    manager.animate(target, { value: 0 }, spring({
+      stiffness: 0,
+      damping: 0,
+      velocity: -100,
+      restDelta: 0,
+      restSpeed: 0,
+    }))
+    manager.tick(100)
+
+    expect(target.value).toBeLessThan(100)
+  })
+
+  it('resolves spring velocity direction independently for object-valued leaves', () => {
+    const manager = new AnimationManager()
+    const target = {
+      value: {
+        x: 0,
+        y: 100,
+      },
+    }
+
+    manager.animate(target, {
+      value: {
+        x: 100,
+        y: 0,
+      },
+    }, spring({
+      stiffness: 0,
+      damping: 0,
+      velocity: 100,
+      restDelta: 0,
+      restSpeed: 0,
+    }))
+    manager.tick(100)
+
+    expect(target.value.x).toBeGreaterThan(0)
+    expect(target.value.y).toBeLessThan(100)
+  })
+
+  it('recomputes nonzero spring velocity direction when retargeting', () => {
+    const manager = new AnimationManager()
+    const target = { value: 0 }
+    const transition = spring({
+      stiffness: 0,
+      damping: 0,
+      velocity: 100,
+      restDelta: 0,
+      restSpeed: 0,
+    })
+
+    manager.animate(target, { value: 100 }, transition)
+    manager.tick(100)
+    const valueBeforeRetargetTick = target.value
+
+    manager.animate(target, { value: -100 }, transition)
+    manager.tick(16)
+
+    expect(target.value).toBeLessThan(valueBeforeRetargetTick)
+  })
+
+  it('runs linear easing halfway at half duration', () => {
+    const manager = new AnimationManager()
+    const target = { value: 0 }
+
+    manager.animate(target, { value: 100 }, easing({
+      duration: 0.1,
+      ease: Easing.linear,
+    }))
+    manager.tick(50)
+
+    expect(target.value).toBeCloseTo(50)
+  })
+
+  it('applies easeInOut differently than linear progress', () => {
+    const manager = new AnimationManager()
+    const target = { value: 0 }
+
+    manager.animate(target, { value: 100 }, easing({
+      duration: 0.1,
+      ease: Easing.easeInOut,
+    }))
+    manager.tick(25)
+
+    expect(target.value).toBeCloseTo(12.5)
+    expect(target.value).not.toBeCloseTo(25)
+  })
+
+  it('interpolates object-valued easing per numeric leaf', () => {
+    const manager = new AnimationManager()
+    const target = {
+      value: {
+        x: 0,
+        y: 100,
+      },
+    }
+
+    manager.animate(target, {
+      value: {
+        x: 100,
+        y: 0,
+      },
+    }, easing({
+      duration: 0.1,
+      ease: Easing.linear,
+    }))
+    manager.tick(50)
+
+    expect(target.value.x).toBeCloseTo(50)
+    expect(target.value.y).toBeCloseTo(50)
+  })
+
+  it('retargets active easing from the current interpolated value', () => {
+    const manager = new AnimationManager()
+    const target = { value: 0 }
+    const transition = easing({
+      duration: 0.1,
+      ease: Easing.linear,
+    })
+
+    manager.animate(target, { value: 100 }, transition)
+    manager.tick(50)
+    expect(target.value).toBeCloseTo(50)
+
+    manager.animate(target, { value: 0 }, transition)
+    manager.tick(25)
+
+    expect(target.value).toBeCloseTo(37.5)
+  })
+
+  it('snaps easing animations with nonpositive duration to the target', () => {
+    const manager = new AnimationManager()
+    const target = { value: 0 }
+
+    manager.animate(target, { value: 100 }, easing({
+      duration: 0,
+      ease: Easing.linear,
+    }))
+
+    expect(target.value).toBe(100)
+    expect(manager.active).toBe(false)
+  })
+
+  it('provides linear cubic bezier easing for a linear curve', () => {
+    const linearBezier = Easing.bezier(0, 0, 1, 1)
+
+    expect(linearBezier(0)).toBeCloseTo(0)
+    expect(linearBezier(0.25)).toBeCloseTo(0.25)
+    expect(linearBezier(0.5)).toBeCloseTo(0.5)
+    expect(linearBezier(0.75)).toBeCloseTo(0.75)
+    expect(linearBezier(1)).toBeCloseTo(1)
+  })
+
   it('exposes refs and mirrors children in React order', async () => {
     const canvasRef = createRef<LayoutCanvasRef>()
     const containerRef = createRef<GlassContainerRef>()
@@ -362,6 +541,34 @@ describe('React layout components', () => {
     expect(htmlRef.current?.element?.style.height).toBe('100%')
     expect(htmlRef.current?.element?.style.display).toBe('block')
     expect(htmlRef.current?.element?.querySelector('[data-testid="inside-html"]')?.textContent).toBe('Hello')
+  })
+
+  it('passes Html blur props through the retained ref', async () => {
+    const htmlRef = createRef<HtmlRef>()
+
+    const view = await renderReact(
+      <LayoutCanvas frameloop="demand" proposal={{ width: 320, height: 200 }}>
+        <ZStack>
+          <Frame width={40} height={20}>
+            <Html ref={htmlRef} blur={12} sizing="fill" />
+          </Frame>
+        </ZStack>
+      </LayoutCanvas>,
+    )
+
+    expect(htmlRef.current?.blur).toBe(12)
+
+    await view.rerender(
+      <LayoutCanvas frameloop="demand" proposal={{ width: 320, height: 200 }}>
+        <ZStack>
+          <Frame width={40} height={20}>
+            <Html ref={htmlRef} blur={3} sizing="fill" />
+          </Frame>
+        </ZStack>
+      </LayoutCanvas>,
+    )
+
+    expect(htmlRef.current?.blur).toBe(3)
   })
 
   it('schedules layout when Html is mutated through its retained ref', async () => {

@@ -15,6 +15,7 @@ import {
   flattenGlassHtml,
   flattenSceneLayers,
   Glass as SceneGlass,
+  Html as SceneHtml,
 } from '../src/scene'
 
 function fixedHtml(width: number, height: number) {
@@ -164,6 +165,33 @@ describe('layout UI tree', () => {
     glass.cornerRadius = 18
 
     expect(events).toEqual(['layout', 'frame'])
+  })
+
+  it('stores blur on scene HTML nodes', () => {
+    const html = new SceneHtml()
+    expect(html.blur).toBe(0)
+
+    const initializedHtml = new SceneHtml({ blur: 12 })
+    expect(initializedHtml.blur).toBe(12)
+
+    initializedHtml.blur = 4
+    expect(initializedHtml.blur).toBe(4)
+  })
+
+  it('propagates retained HTML blur to the scene node and invalidates frames', () => {
+    const scene = new LayoutScene()
+    const html = scene.add(new Html({ blur: 10 }))
+    const events: string[] = []
+    scene.addInvalidationListener((event) => events.push(event.kind))
+
+    expect(html.blur).toBe(10)
+    expect(html.sceneNode.blur).toBe(10)
+
+    html.blur = 2
+
+    expect(html.blur).toBe(2)
+    expect(html.sceneNode.blur).toBe(2)
+    expect(events).toEqual(['frame'])
   })
 
   it('emits layout invalidation when an HTML measured element is replaced', () => {
