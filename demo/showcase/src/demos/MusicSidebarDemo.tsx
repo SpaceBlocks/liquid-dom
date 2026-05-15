@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Frame,
   Glass,
@@ -138,30 +139,59 @@ export default function MusicSidebarDemo() {
 }
 
 function Sidebar() {
+  const [selectedItem, setSelectedItem] = useState('Home')
+
   return (
     <nav className={styles.sidebarContent} aria-label="Music navigation">
-      <SidebarGroup items={primaryItems} />
-      <SidebarGroup title="Library" items={libraryItems} />
-      <SidebarGroup title="Playlists" items={playlistItems} />
+      <SidebarGroup
+        items={primaryItems}
+        selectedItem={selectedItem}
+        onSelect={setSelectedItem}
+      />
+      <SidebarGroup
+        title="Library"
+        items={libraryItems}
+        selectedItem={selectedItem}
+        onSelect={setSelectedItem}
+      />
+      <SidebarGroup
+        title="Playlists"
+        items={playlistItems}
+        selectedItem={selectedItem}
+        onSelect={setSelectedItem}
+      />
     </nav>
   )
 }
 
-function SidebarGroup({ title, items }: { title?: string; items: SidebarItem[] }) {
+function SidebarGroup({
+  title,
+  items,
+  selectedItem,
+  onSelect,
+}: {
+  title?: string
+  items: SidebarItem[]
+  selectedItem: string
+  onSelect: (label: string) => void
+}) {
   return (
     <div className={styles.sidebarGroup}>
       {title ? <div className={styles.groupTitle}>{title}</div> : null}
       {items.map((item) => (
-        <div
+        <button
           key={item.label}
           className={[
             styles.sidebarItem,
-            item.active ? styles.sidebarItemActive : '',
+            item.label === selectedItem ? styles.sidebarItemActive : '',
           ].join(' ')}
+          type="button"
+          aria-current={item.label === selectedItem ? 'page' : undefined}
+          onClick={() => onSelect(item.label)}
         >
           <item.Icon className={styles.icon} aria-hidden="true" />
           <span>{item.label}</span>
-        </div>
+        </button>
       ))}
     </div>
   )
