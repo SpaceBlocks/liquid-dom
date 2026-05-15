@@ -1,11 +1,14 @@
 import type { Matrix2D } from '../matrix'
 import type { Glass, Html } from '../scene'
+import type { AdaptiveBlurTargetChain } from './gpu-targets'
 
 /** Runtime texture and transform state for one scene-attached HTML node. */
 export type SceneHtmlEntry = {
   html: Html
   texture: GPUTexture | null
+  filteredTexture: GPUTexture | null
   elementVersion: number
+  blur: number
   width: number
   height: number
   deviceWidth: number
@@ -14,6 +17,7 @@ export type SceneHtmlEntry = {
   copiedDeviceHeight: number
   textureWidth: number
   textureHeight: number
+  blurTargetChain: AdaptiveBlurTargetChain | null
   transform: Matrix2D
   inverseTransform: Matrix2D | null
 }

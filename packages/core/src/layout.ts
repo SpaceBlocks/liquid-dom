@@ -104,6 +104,8 @@ export type GlassOptions = Omit<GlassInit, keyof SceneTransform | 'width' | 'hei
 export type HtmlOptions = {
   /** Final opacity used when compositing this HTML node into the rendered scene. */
   opacity?: number
+  /** Content blur radius in CSS pixels applied when compositing this HTML node. */
+  blur?: number
   /** Scene draw order among sibling scene or glass HTML nodes. */
   zIndex?: number
   /** Measured content element rendered inside the layout-owned scene HTML host. */
@@ -1293,6 +1295,7 @@ export class Html extends UiNode<LeafNode, SceneHtml> {
     syncOwnedHtmlElementSizing(ownedElement, sizing)
     const sceneNode = new SceneHtml({
       opacity: options.opacity,
+      blur: options.blur,
       zIndex: options.zIndex,
       element: contentElement,
     })
@@ -1338,6 +1341,16 @@ export class Html extends UiNode<LeafNode, SceneHtml> {
   set opacity(value: number) {
     if (setProperty(this.sceneNode, 'opacity', value)) {
       this.invalidateFrame('opacity')
+    }
+  }
+
+  get blur(): number {
+    return this.sceneNode.blur
+  }
+
+  set blur(value: number) {
+    if (setProperty(this.sceneNode, 'blur', value)) {
+      this.invalidateFrame('blur')
     }
   }
 

@@ -10,12 +10,23 @@ import {
   packContentAtlas,
   type GlassContentEntry,
 } from './content'
+import {
+  createAdaptiveBlurResources,
+  destroyAdaptiveBlurResources,
+  renderAdaptiveBlur,
+  type AdaptiveBlurResources,
+} from './adaptive-blur'
 import { GPU_BUFFER_USAGE, GPU_TEXTURE_USAGE } from './gpu-constants'
 import {
   GpuStructArrayBuffer,
   type GpuStructDefinition,
 } from './gpu-layout'
-import { copyTextureRegion } from './gpu-targets'
+import {
+  copyTextureRegion,
+  createAdaptiveBlurTargetChain,
+  createRenderTarget,
+  destroyAdaptiveBlurTargetChain,
+} from './gpu-targets'
 import { matrixToCssTransform, type FlattenedContainer } from './interaction'
 import { getSortedGlassHtmlLayers, getSortedGlassLayers } from './scene-order'
 import { ContentDataLayout } from './shader-layouts'
@@ -135,11 +146,15 @@ export class DomContentSync {
   private readonly glassContentRanges = new Map<Glass, GlassContentRange>()
   private glassContentOrder: GlassContentEntry[] = []
   private needsSceneHtmlCopy = false
+  private needsSceneHtmlFilter = false
   private needsContentCopy = false
+  private needsContentFilter = false
   private contentEntriesBuffer: ContentDataBuffer | null = null
   private glassContentAtlas: GPUTexture | null = null
   private glassContentAtlasWidth = 0
   private glassContentAtlasHeight = 0
+  private sampler: GPUSampler | null = null
+  private htmlBlurResources: AdaptiveBlurResources | null = null
 
   /** Creates a DOM content sync helper for one renderer canvas. */
   constructor(private readonly options: DomContentSyncOptions) {}
@@ -158,6 +173,14 @@ export class DomContentSync {
   setDevice(device: GPUDevice, presentationFormat: GPUTextureFormat) {
     this.device = device
     this.presentationFormat = presentationFormat
+    this.sampler = device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+    })
+    destroyAdaptiveBlurResources(this.htmlBlurResources)
+    this.htmlBlurResources = createAdaptiveBlurResources(device, presentationFormat)
     this.contentEntriesBuffer?.destroy()
     this.contentEntriesBuffer = new GpuStructArrayBuffer(
       device,
@@ -171,12 +194,15 @@ export class DomContentSync {
   destroy() {
     for (const entry of this.sceneHtmlEntries.values()) {
       entry.texture?.destroy()
+      destroyAdaptiveBlurTargetChain(entry.blurTargetChain)
       entry.html.host.remove()
     }
     this.sceneHtmlEntries.clear()
     this.sceneHtmlHosts.clear()
 
     for (const entry of this.glassContentEntries.values()) {
+      entry.sourceTexture?.destroy()
+      destroyAdaptiveBlurTargetChain(entry.blurTargetChain)
       entry.html.host.remove()
     }
     this.glassContentEntries.clear()
@@ -189,6 +215,9 @@ export class DomContentSync {
     this.glassContentAtlasHeight = 0
     this.contentEntriesBuffer?.destroy()
     this.contentEntriesBuffer = null
+    destroyAdaptiveBlurResources(this.htmlBlurResources)
+    this.htmlBlurResources = null
+    this.sampler = null
   }
 
   /** Handles canvas paint events by copying changed DOM hosts into textures. */
@@ -212,8 +241,16 @@ export class DomContentSync {
       this.copySceneHtmlTextures()
     }
 
+    if (this.needsSceneHtmlFilter) {
+      this.filterSceneHtmlTextures()
+    }
+
     if (shouldCopyContent) {
       this.copyGlassContentAtlas()
+    }
+
+    if (this.needsContentFilter) {
+      this.filterGlassContentAtlas()
     }
   }
 
@@ -223,8 +260,16 @@ export class DomContentSync {
       this.copySceneHtmlTextures()
     }
 
+    if (this.needsSceneHtmlFilter) {
+      this.filterSceneHtmlTextures()
+    }
+
     if (this.needsContentCopy) {
       this.copyGlassContentAtlas()
+    }
+
+    if (this.needsContentFilter) {
+      this.filterGlassContentAtlas()
     }
   }
 
@@ -257,6 +302,7 @@ export class DomContentSync {
     }
 
     entry.texture?.destroy()
+    destroyAdaptiveBlurTargetChain(entry.blurTargetChain)
     this.sceneHtmlHosts.delete(html.host)
     this.sceneHtmlEntries.delete(html)
     if (!keepHostMounted) {
@@ -271,6 +317,8 @@ export class DomContentSync {
       return
     }
 
+    entry.sourceTexture?.destroy()
+    destroyAdaptiveBlurTargetChain(entry.blurTargetChain)
     this.glassContentHosts.delete(html.host)
     this.glassContentEntries.delete(html)
     if (!keepHostMounted) {
@@ -298,7 +346,9 @@ export class DomContentSync {
         entry = {
           html,
           texture: null,
+          filteredTexture: null,
           elementVersion: -1,
+          blur: -1,
           width: -1,
           height: -1,
           deviceWidth: 0,
@@ -307,6 +357,7 @@ export class DomContentSync {
           copiedDeviceHeight: 0,
           textureWidth: 0,
           textureHeight: 0,
+          blurTargetChain: null,
           transform: layer.transform,
           inverseTransform: null,
         }
@@ -321,6 +372,11 @@ export class DomContentSync {
       if (entry.elementVersion !== html._elementVersion) {
         entry.elementVersion = html._elementVersion
         contentChanged = true
+      }
+
+      if (entry.blur !== html.blur) {
+        entry.blur = html.blur
+        this.needsSceneHtmlFilter = true
       }
 
       const previousDeviceWidth = entry.deviceWidth
@@ -400,7 +456,10 @@ export class DomContentSync {
           }
 
           previousTexture?.destroy()
+          destroyAdaptiveBlurTargetChain(entry.blurTargetChain)
           entry.texture = nextTexture
+          entry.filteredTexture = null
+          entry.blurTargetChain = null
           entry.textureWidth = nextTextureWidth
           entry.textureHeight = nextTextureHeight
           layoutChanged = true
@@ -429,6 +488,7 @@ export class DomContentSync {
 
     if (activeHtml.size === 0) {
       this.needsSceneHtmlCopy = false
+      this.needsSceneHtmlFilter = false
       return
     }
 
@@ -497,12 +557,18 @@ export class DomContentSync {
               html,
               glass,
               elementVersion: -1,
+              blur: -1,
               width: -1,
               height: -1,
               deviceWidth: 0,
               deviceHeight: 0,
               copiedDeviceWidth: 0,
               copiedDeviceHeight: 0,
+              sourceTexture: null,
+              sourceTextureWidth: 0,
+              sourceTextureHeight: 0,
+              filteredTexture: null,
+              blurTargetChain: null,
               atlasX: 0,
               atlasY: 0,
               inverseTransform,
@@ -526,6 +592,18 @@ export class DomContentSync {
 
           const nextDeviceWidth = Math.max(1, Math.round(html.width * currentDpr))
           const nextDeviceHeight = Math.max(1, Math.round(html.height * currentDpr))
+          let nextSourceTextureWidth = contentEntry.sourceTextureWidth
+          let nextSourceTextureHeight = contentEntry.sourceTextureHeight
+          let sourceTextureSizeChanged = false
+
+          if (this.device) {
+            nextSourceTextureWidth = getTextureBucketSize(nextDeviceWidth, this.device.limits.maxTextureDimension2D)
+            nextSourceTextureHeight = getTextureBucketSize(nextDeviceHeight, this.device.limits.maxTextureDimension2D)
+            sourceTextureSizeChanged =
+              contentEntry.sourceTextureWidth !== nextSourceTextureWidth ||
+              contentEntry.sourceTextureHeight !== nextSourceTextureHeight
+          }
+
           if (
             contentEntry.width !== html.width ||
             contentEntry.height !== html.height ||
@@ -538,6 +616,35 @@ export class DomContentSync {
             contentEntry.deviceHeight = nextDeviceHeight
             layoutChanged = true
             contentChanged = true
+          }
+
+          if (contentEntry.blur !== html.blur) {
+            contentEntry.blur = html.blur
+            this.needsContentFilter = true
+          }
+
+          if (this.device && this.presentationFormat) {
+            const rebuildSourceTexture =
+              !contentEntry.sourceTexture ||
+              sourceTextureSizeChanged
+
+            if (rebuildSourceTexture) {
+              contentEntry.sourceTexture?.destroy()
+              destroyAdaptiveBlurTargetChain(contentEntry.blurTargetChain)
+              contentEntry.sourceTexture = createRenderTarget(
+                this.device,
+                this.presentationFormat,
+                nextSourceTextureWidth,
+                nextSourceTextureHeight,
+              )
+              contentEntry.sourceTextureWidth = nextSourceTextureWidth
+              contentEntry.sourceTextureHeight = nextSourceTextureHeight
+              contentEntry.filteredTexture = null
+              contentEntry.blurTargetChain = null
+              contentEntry.copiedDeviceWidth = 0
+              contentEntry.copiedDeviceHeight = 0
+              contentChanged = true
+            }
           }
 
           activeEntries.push(contentEntry)
@@ -578,6 +685,7 @@ export class DomContentSync {
       this.glassContentAtlasWidth = 0
       this.glassContentAtlasHeight = 0
       this.needsContentCopy = false
+      this.needsContentFilter = false
       return
     }
 
@@ -677,6 +785,7 @@ export class DomContentSync {
       }
 
       this.needsContentCopy = true
+      this.needsContentFilter = true
     } else if (contentChanged) {
       this.needsContentCopy = true
     }
@@ -731,6 +840,7 @@ export class DomContentSync {
     }
 
     let copiedAll = true
+    let copiedAny = false
     for (const entry of this.sceneHtmlEntries.values()) {
       if (!entry.texture) {
         copiedAll = false
@@ -746,6 +856,7 @@ export class DomContentSync {
         )
         entry.copiedDeviceWidth = entry.deviceWidth
         entry.copiedDeviceHeight = entry.deviceHeight
+        copiedAny = true
       } catch (error) {
         copiedAll = false
         if (!(error instanceof DOMException && error.name === 'InvalidStateError')) {
@@ -754,13 +865,73 @@ export class DomContentSync {
       }
     }
 
+    if (copiedAny) {
+      this.needsSceneHtmlFilter = true
+    }
+
     this.needsSceneHtmlCopy = !copiedAll
     return copiedAll
   }
 
-  /** Copies glass-attached HTML hosts into the shared content atlas. */
+  /** Applies GPU blur to scene-attached HTML textures when requested. */
+  private filterSceneHtmlTextures() {
+    if (!this.device || !this.sampler || !this.htmlBlurResources) {
+      this.needsSceneHtmlFilter = false
+      return true
+    }
+
+    const encoder = this.device.createCommandEncoder()
+    let filteredAny = false
+
+    for (const entry of this.sceneHtmlEntries.values()) {
+      entry.filteredTexture = null
+
+      if (!entry.texture || entry.copiedDeviceWidth <= 0 || entry.copiedDeviceHeight <= 0) {
+        continue
+      }
+
+      const blurRadiusPx = entry.html.blur * this.options.getCurrentDpr()
+      if (blurRadiusPx <= 0) {
+        continue
+      }
+
+      if (
+        !entry.blurTargetChain ||
+        entry.blurTargetChain.levels[0]?.width !== entry.textureWidth ||
+        entry.blurTargetChain.levels[0]?.height !== entry.textureHeight
+      ) {
+        destroyAdaptiveBlurTargetChain(entry.blurTargetChain)
+        entry.blurTargetChain = createAdaptiveBlurTargetChain(
+          this.device,
+          this.presentationFormat ?? 'bgra8unorm',
+          entry.textureWidth,
+          entry.textureHeight,
+        )
+      }
+
+      entry.filteredTexture = renderAdaptiveBlur({
+        device: this.device,
+        sampler: this.sampler,
+        encoder,
+        source: entry.texture,
+        radiusPx: blurRadiusPx,
+        chain: entry.blurTargetChain,
+        resources: this.htmlBlurResources,
+      })
+      filteredAny = true
+    }
+
+    if (filteredAny) {
+      this.device.queue.submit([encoder.finish()])
+    }
+
+    this.needsSceneHtmlFilter = false
+    return true
+  }
+
+  /** Copies glass-attached HTML hosts into per-node source textures. */
   private copyGlassContentAtlas() {
-    if (!this.device || !this.glassContentAtlas || this.glassContentOrder.length === 0) {
+    if (!this.device || this.glassContentOrder.length === 0) {
       this.needsContentCopy = false
       return true
     }
@@ -768,19 +939,17 @@ export class DomContentSync {
     let copiedAll = true
     let copiedAny = false
     for (const entry of this.glassContentOrder) {
+      if (!entry.sourceTexture) {
+        copiedAll = false
+        continue
+      }
+
       try {
         ;(this.device.queue as GPUQueueWithElementCopy).copyElementImageToTexture(
           entry.html.host,
           entry.deviceWidth,
           entry.deviceHeight,
-          {
-            texture: this.glassContentAtlas,
-            origin: {
-              x: entry.atlasX + CONTENT_ATLAS_PADDING,
-              y: entry.atlasY + CONTENT_ATLAS_PADDING,
-              z: 0,
-            },
-          },
+          { texture: entry.sourceTexture },
         )
         entry.copiedDeviceWidth = entry.deviceWidth
         entry.copiedDeviceHeight = entry.deviceHeight
@@ -794,10 +963,81 @@ export class DomContentSync {
     }
 
     if (copiedAny) {
-      this.writeContentEntries(this.glassContentOrder)
+      this.needsContentFilter = true
     }
 
     this.needsContentCopy = !copiedAll
     return copiedAll
+  }
+
+  /** Applies GPU blur to glass-attached HTML sources and writes the result into the content atlas. */
+  private filterGlassContentAtlas() {
+    if (
+      !this.device ||
+      !this.sampler ||
+      !this.htmlBlurResources ||
+      !this.glassContentAtlas ||
+      this.glassContentOrder.length === 0
+    ) {
+      this.needsContentFilter = false
+      return true
+    }
+
+    const encoder = this.device.createCommandEncoder()
+    let copiedAny = false
+
+    for (const entry of this.glassContentOrder) {
+      if (!entry.sourceTexture || entry.copiedDeviceWidth <= 0 || entry.copiedDeviceHeight <= 0) {
+        continue
+      }
+
+      let sourceTexture = entry.sourceTexture
+      const blurRadiusPx = entry.html.blur * this.options.getCurrentDpr()
+      entry.filteredTexture = null
+
+      if (blurRadiusPx > 0) {
+        if (
+          !entry.blurTargetChain ||
+          entry.blurTargetChain.levels[0]?.width !== entry.sourceTextureWidth ||
+          entry.blurTargetChain.levels[0]?.height !== entry.sourceTextureHeight
+        ) {
+          destroyAdaptiveBlurTargetChain(entry.blurTargetChain)
+          entry.blurTargetChain = createAdaptiveBlurTargetChain(
+            this.device,
+            this.presentationFormat ?? 'bgra8unorm',
+            entry.sourceTextureWidth,
+            entry.sourceTextureHeight,
+          )
+        }
+
+        entry.filteredTexture = renderAdaptiveBlur({
+          device: this.device,
+          sampler: this.sampler,
+          encoder,
+          source: entry.sourceTexture,
+          radiusPx: blurRadiusPx,
+          chain: entry.blurTargetChain,
+          resources: this.htmlBlurResources,
+        })
+        sourceTexture = entry.filteredTexture
+      }
+
+      copiedAny = copyTextureRegion(encoder, sourceTexture, this.glassContentAtlas, {
+        sourceX: 0,
+        sourceY: 0,
+        destinationX: entry.atlasX + CONTENT_ATLAS_PADDING,
+        destinationY: entry.atlasY + CONTENT_ATLAS_PADDING,
+        width: entry.copiedDeviceWidth,
+        height: entry.copiedDeviceHeight,
+      }) || copiedAny
+    }
+
+    if (copiedAny) {
+      this.writeContentEntries(this.glassContentOrder)
+      this.device.queue.submit([encoder.finish()])
+    }
+
+    this.needsContentFilter = false
+    return true
   }
 }

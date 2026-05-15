@@ -309,6 +309,7 @@ export class Renderer {
 
     this.pointerController.syncInteractions(containers)
     this.domContent.sync(layers, containers, hostOrder)
+    this.domContent.copyPending()
 
     this.pendingSceneContentSync = false
     return layers

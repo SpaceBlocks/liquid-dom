@@ -9,6 +9,7 @@ export type HtmlInit = Partial<Transform> & {
   width?: number
   height?: number
   opacity?: number
+  blur?: number
   zIndex?: number
   element?: HTMLElement | null
 }
@@ -273,6 +274,7 @@ export class Html implements Transform {
   private _width = 0
   private _height = 0
   private _opacity = 1
+  private _blur = 0
   private _zIndex = 0
   private _element: HTMLElement | null = null
   _elementVersion = 0
@@ -303,6 +305,9 @@ export class Html implements Transform {
     }
     if (options.opacity !== undefined) {
       this.opacity = options.opacity
+    }
+    if (options.blur !== undefined) {
+      this.blur = options.blur
     }
     if (options.zIndex !== undefined) {
       this.zIndex = options.zIndex
@@ -353,6 +358,20 @@ export class Html implements Transform {
     }
 
     this._opacity = value
+    notifySceneMutation(this)
+  }
+
+  /** Content blur radius in CSS pixels applied when compositing this HTML node. */
+  get blur() {
+    return this._blur
+  }
+
+  set blur(value: number) {
+    if (this._blur === value) {
+      return
+    }
+
+    this._blur = value
     notifySceneMutation(this)
   }
 

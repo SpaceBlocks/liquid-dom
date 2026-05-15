@@ -474,12 +474,14 @@ export function Html({
   ref,
   children,
   opacity,
+  blur,
   zIndex,
   sizing,
   transition,
 }: HtmlProps) {
   const node = useStableNode(() => new LayoutHtml({
     opacity,
+    blur,
     zIndex,
     sizing,
   }))
@@ -487,7 +489,7 @@ export function Html({
   useAttachNode(node)
 
   useAnimatedProps(node, { sizing }, transition)
-  useAnimatedProps(node, { opacity, zIndex }, transition, { assignUndefined: false })
+  useAnimatedProps(node, { opacity, blur, zIndex }, transition, { assignUndefined: false })
 
   return node.element ? createPortal(children, node.element) : null
 }

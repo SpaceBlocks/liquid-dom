@@ -748,7 +748,7 @@ export class WebGpuGlassCore {
     entry: SceneHtmlEntry,
   ) {
     if (
-      !entry.texture ||
+      (!entry.filteredTexture && !entry.texture) ||
       !entry.inverseTransform
     ) {
       return
@@ -759,7 +759,7 @@ export class WebGpuGlassCore {
     const bindGroup = createPipelineBindGroup(this.device, this.htmlCompositePipeline, [
       { binding: 0, resource: this.sampler },
       { binding: 1, resource: sharpSource.createView() },
-      { binding: 2, resource: entry.texture.createView() },
+      { binding: 2, resource: (entry.filteredTexture ?? entry.texture)!.createView() },
       { binding: 3, resource: this.htmlCompositeParamsBuffer.bindingResource },
     ])
     drawFullscreenPass(encoder, {

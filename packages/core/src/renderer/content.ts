@@ -1,5 +1,6 @@
 import type { Glass, Html } from '../scene'
 import type { Matrix2D } from '../matrix'
+import type { AdaptiveBlurTargetChain } from './gpu-targets'
 
 /** Padding in atlas pixels around each HTML content copy to reduce edge bleeding. */
 export const CONTENT_ATLAS_PADDING = 1
@@ -9,12 +10,18 @@ export type GlassContentEntry = {
   html: Html
   glass: Glass
   elementVersion: number
+  blur: number
   width: number
   height: number
   deviceWidth: number
   deviceHeight: number
   copiedDeviceWidth: number
   copiedDeviceHeight: number
+  sourceTexture: GPUTexture | null
+  sourceTextureWidth: number
+  sourceTextureHeight: number
+  filteredTexture: GPUTexture | null
+  blurTargetChain: AdaptiveBlurTargetChain | null
   atlasX: number
   atlasY: number
   inverseTransform: Matrix2D
