@@ -61,7 +61,7 @@ const BUTTON_SCALE_TRANSITION = spring({
   damping: 24,
 })
 const BUTTON_CONTENT_OPEN_TRANSITION = easing({
-  duration: 0.15,
+  duration: 0.01,
   ease: Easing.easeOut,
 })
 const BUTTON_CONTENT_CLOSE_TRANSITION = easing({
