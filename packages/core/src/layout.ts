@@ -1243,13 +1243,13 @@ export class Glass extends SingleChildUiNode<RetainedLayoutNode, SceneGlass> {
     }
   }
 
-  get cornerTransitionSpeed(): number {
-    return this.sceneNode.cornerTransitionSpeed
+  get cornerSmoothing(): number {
+    return this.sceneNode.cornerSmoothing
   }
 
-  set cornerTransitionSpeed(value: number) {
-    if (setProperty(this.sceneNode, 'cornerTransitionSpeed', value)) {
-      this.invalidateFrame('cornerTransitionSpeed')
+  set cornerSmoothing(value: number) {
+    if (setProperty(this.sceneNode, 'cornerSmoothing', value)) {
+      this.invalidateFrame('cornerSmoothing')
     }
   }
 

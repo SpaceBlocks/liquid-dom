@@ -311,7 +311,7 @@ function NotificationCenterScene() {
             specularOpacity={0.2}
             specularFalloff={1}
           >
-            <Glass cornerRadius={60}>
+            <Glass cornerRadius={36}>
               <Padding insets={{ horizontal: 18, vertical: 18 }}>
               <Html
                 sizing="intrinsic"
@@ -441,7 +441,7 @@ function CenterButton({
     >
       <Frame width={BUTTON_SIZE} height={BUTTON_SIZE}>
         <Glass
-          cornerRadius={400}
+          cornerRadius={BUTTON_SIZE / 2}
           pointerEvents
           onHover={setHovered}
           onPress={setPressed}

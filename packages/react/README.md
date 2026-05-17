@@ -91,8 +91,19 @@ import { Glass, GlassContainer, Html } from '@liquid-dom/react'
 ```
 
 - `GlassContainer` owns the optical settings shared by its glass children, including blur, spacing, tint, refraction, specular, and shadow options.
-- `Glass` defines one rounded-rectangle glass shape and can opt into SDF pointer events.
+- `Glass` defines one smooth rounded-rectangle glass shape and can opt into pointer events.
 - `Html` renders React children into a DOM element owned by the retained `Html` node.
+
+`Glass` shape props include uniform `cornerRadius` and analytic `cornerSmoothing`:
+
+```tsx
+<Glass
+  cornerRadius={32}
+  cornerSmoothing={0.6}
+/>
+```
+
+`cornerSmoothing={0}` produces circular rounded-rectangle corners. Higher values use a fuller p-norm corner curve; the default `0.6` is tuned for an iOS-like squircle. Very constrained corners automatically reduce smoothing back toward a circular shape.
 
 `Html` supports `sizing="intrinsic"`, `sizing="constrained-width"`, and `sizing="fill"`.
 

@@ -472,6 +472,10 @@ export class WebGpuGlassCore {
 
     for (const glassLayer of glassLayers) {
       const glass = glassLayer.glass
+      if (glass.width <= 0 || glass.height <= 0) {
+        continue
+      }
+
       const worldCss = multiplyMatrices(containerTransform, glassLayer.transform)
       const worldDevice = scaleOutputMatrix(worldCss, dpr)
       const inverse = invertMatrix(worldDevice)
@@ -507,7 +511,7 @@ export class WebGpuGlassCore {
         geometry: {
           halfWidth,
           halfHeight,
-          cornerTransitionSpeed: glass.cornerTransitionSpeed,
+          cornerSmoothing: glass.cornerSmoothing,
         },
         contentRange: {
           start: contentRange?.start ?? 0,

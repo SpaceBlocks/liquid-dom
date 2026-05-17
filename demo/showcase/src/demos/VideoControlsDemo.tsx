@@ -219,7 +219,7 @@ function ControlButton({
       }}
     >
       <Glass
-        cornerRadius={400}
+        cornerRadius={size / 2}
         pointerEvents={visible}
         onClick={onClick}
         onHover={setHovered}

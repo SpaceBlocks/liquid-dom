@@ -27,7 +27,7 @@ import styles from './MenuDemo.module.css'
 
 const BUTTON_SIZE = 50
 const CLOSED_MENU_SIZE = 40
-const CLOSED_MENU_RADIUS = 1000
+const CLOSED_MENU_RADIUS = 130
 const CLOSED_MENU_CONTENT_BLUR = 8
 const CLOSED_MENU_CONTENT_SCALE = 2
 const MENU_WIDTH = 320
@@ -85,8 +85,12 @@ const MENU_CLOSE_SIZE_TRANSITION = easing({
   ease: Easing.easeOut,
 })
 const MENU_OPEN_RADIUS_TRANSITION = easing({
-  duration: 0.25,
-  ease: Easing.bezier(0.8, 0.3, 0.5, 0.8),
+  duration: 0.7,
+  ease: Easing.easeOut,
+})
+const MENU_CLOSE_RADIUS_TRANSITION = easing({
+  duration: 0.7,
+  ease: Easing.easeOut,
 })
 const CONTENT_TRANSITION = spring({
   stiffness: 137,
@@ -241,7 +245,7 @@ export default function MenuDemo() {
                     shadowColor={{ r: 0, g: 0, b: 0, a: 0.14 }}
                     shadowOffsetY={18}
                     shadowBlur={46}
-                    specularOpacity={0.5}
+                    specularOpacity={0.7}
                     displacementBlur={20}
                     contentIor={contentOpticsActive ? CONTENT_ACTIVE_IOR : CONTENT_IOR}
                     contentDepth={contentOpticsActive ? CONTENT_ACTIVE_DEPTH : CONTENT_DEPTH}
@@ -270,8 +274,9 @@ export default function MenuDemo() {
                             transition={{
                               cornerRadius: open
                                 ? MENU_OPEN_RADIUS_TRANSITION
-                                : MENU_CLOSE_SIZE_TRANSITION,
+                                : MENU_CLOSE_RADIUS_TRANSITION,
                             }}
+                            cornerSmoothing={0.6}
                           >
                             <Frame                                
                               width={open ? MENU_WIDTH : CLOSED_MENU_SIZE}
@@ -332,7 +337,7 @@ export default function MenuDemo() {
                       >
                         <Frame width={BUTTON_SIZE} height={BUTTON_SIZE}>
                           <Glass
-                            cornerRadius={400}
+                            cornerRadius={BUTTON_SIZE / 2}
                             pointerEvents={!open}
                             onHover={setButtonHovered}
                             onPress={setButtonPressed}

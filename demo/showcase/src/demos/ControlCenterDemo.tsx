@@ -36,8 +36,8 @@ import backgroundUrl from '../assets/narrow-background.jpg'
 import styles from './ControlCenterDemo.module.css'
 
 const CARD_SIZE = 248
-const CARD_RADIUS = 80
-const DEFAULT_LIGHT_DIRECTION = -Math.PI / 5
+const CARD_RADIUS = 75
+const DEFAULT_LIGHT_DIRECTION = -Math.PI / 6
 const LIGHT_RESET_TRANSITION = spring({
   stiffness: 180,
   damping: 24,
@@ -83,7 +83,7 @@ export default function ControlCenterDemo() {
               specularFalloff={1}
               specularWidth={2}
               specularStrength={1}
-              specularSharpness={6}
+              specularSharpness={3}
               oppositeSpecularStrength={0.5}
             >
               <HStack spacing={27}>

@@ -1,4 +1,9 @@
 import type { GlassPointerEvent, GlassPointerEventType } from './events'
+import {
+  DEFAULT_CORNER_SMOOTHING,
+  sanitizeCornerRadius,
+  sanitizeCornerSmoothing,
+} from './corner-smoothing'
 import { composeTransform, identityMatrix, multiplyMatrices, type Matrix2D } from './matrix'
 import type { Point, RgbaColor, SpecularWidth, SurfaceProfile, Transform } from './types'
 
@@ -21,7 +26,7 @@ export type GlassInit = Partial<Transform> & {
   width?: number
   height?: number
   cornerRadius?: number
-  cornerTransitionSpeed?: number
+  cornerSmoothing?: number
   pointerEvents?: boolean
   zIndex?: number
 }
@@ -468,10 +473,39 @@ export class Glass extends EventTarget implements Transform {
     notifySceneMutation(this)
   }
 
-  /** Corner radius in CSS pixels. */
-  cornerRadius = 0
-  /** Controls the blend from squircle-like corners toward circular corners. */
-  cornerTransitionSpeed = 120
+  private _cornerRadius = 0
+  private _cornerSmoothing = DEFAULT_CORNER_SMOOTHING
+
+  /** Uniform corner radius in CSS pixels. */
+  get cornerRadius() {
+    return this._cornerRadius
+  }
+
+  set cornerRadius(value: number) {
+    const sanitized = sanitizeCornerRadius(value)
+    if (this._cornerRadius === sanitized) {
+      return
+    }
+
+    this._cornerRadius = sanitized
+    notifySceneMutation(this)
+  }
+
+  /** Smooth-corner amount. 0 produces circular corners; 0.6 is tuned for an iOS-like squircle. */
+  get cornerSmoothing() {
+    return this._cornerSmoothing
+  }
+
+  set cornerSmoothing(value: number) {
+    const sanitized = sanitizeCornerSmoothing(value)
+    if (this._cornerSmoothing === sanitized) {
+      return
+    }
+
+    this._cornerSmoothing = sanitized
+    notifySceneMutation(this)
+  }
+
   private _pointerEvents = false
   private _zIndex = 0
 
@@ -522,8 +556,8 @@ export class Glass extends EventTarget implements Transform {
     if (options.cornerRadius !== undefined) {
       this.cornerRadius = options.cornerRadius
     }
-    if (options.cornerTransitionSpeed !== undefined) {
-      this.cornerTransitionSpeed = options.cornerTransitionSpeed
+    if (options.cornerSmoothing !== undefined) {
+      this.cornerSmoothing = options.cornerSmoothing
     }
     if (options.pointerEvents !== undefined) {
       this.pointerEvents = options.pointerEvents

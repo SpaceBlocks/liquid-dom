@@ -1,5 +1,8 @@
+import { resolveCornerSmoothingExponent } from '../corner-smoothing'
 import { invertMatrix, multiplyMatrices, transformPoint, type Matrix2D } from '../matrix'
 import { flattenContainerGlasses, type Container, type Glass } from '../scene'
+
+const SDF_EPSILON = 0.0001
 
 /** Flattened container with the world transform used for hit testing. */
 export type FlattenedContainer = {
@@ -18,7 +21,7 @@ export type GlassInteractionEntry = {
   halfWidth: number
   halfHeight: number
   cornerRadius: number
-  cornerTransitionSpeed: number
+  cornerSmoothing: number
 }
 
 /** Canvas-relative pointer coordinates paired with the original DOM event. */
@@ -37,41 +40,34 @@ export type PointerState = {
   lastSnapshot: PointerSnapshot | null
 }
 
-/** Restricts a number to an inclusive range. */
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
-/** Computes a superellipse-style length used by the rounded glass SDF. */
-function squircleLength(x: number, y: number) {
-  return (x ** 4 + y ** 4) ** 0.25
+function superellipseLength(x: number, y: number, exponent: number) {
+  return (Math.abs(x) ** exponent + Math.abs(y) ** exponent) ** (1 / exponent)
 }
 
-/** Computes Euclidean length used by the circular corner fallback. */
-function circularLength(x: number, y: number) {
-  return Math.hypot(x, y)
-}
-
-/** Signed distance to a rounded rectangle with squircle-to-circle blending. */
-function sdRoundRect(
+// Mirrors the WGSL shape SDF in ../shaders.ts for pointer hit testing.
+function sdSmoothRoundRect(
   localX: number,
   localY: number,
   halfWidth: number,
   halfHeight: number,
   radius: number,
-  cornerTransitionSpeed: number,
+  cornerSmoothing: number,
 ) {
   const cornerLimit = Math.min(halfWidth, halfHeight)
-  const clampedRadius = Math.min(radius, cornerLimit)
-  const blendDistance = Math.max(cornerTransitionSpeed, 0.0001)
-  const circleBlend = clamp((radius - cornerLimit) / blendDistance, 0, 1)
+  const clampedRadius = Math.min(Math.max(radius, 0), cornerLimit)
   const qx = Math.abs(localX) - halfWidth + clampedRadius
   const qy = Math.abs(localY) - halfHeight + clampedRadius
-  const cornerX = Math.max(qx, 0)
-  const cornerY = Math.max(qy, 0)
-  const cornerDistance =
-    squircleLength(cornerX, cornerY) * (1 - circleBlend) +
-    circularLength(cornerX, cornerY) * circleBlend
+  const maxSmoothingThatFits = radius > SDF_EPSILON
+    ? Math.max(cornerLimit / Math.max(radius, SDF_EPSILON) - 1, 0)
+    : 0
+  const effectiveSmoothing = Math.min(clamp(cornerSmoothing, 0, 1), maxSmoothingThatFits)
+  const exponent = resolveCornerSmoothingExponent(effectiveSmoothing)
+  const cornerDistance = superellipseLength(Math.max(qx, 0), Math.max(qy, 0), exponent)
+
   return cornerDistance + Math.min(Math.max(qx, qy), 0) - clampedRadius
 }
 
@@ -110,7 +106,7 @@ export function createGlassInteractionEntries(containers: FlattenedContainer[]) 
         halfWidth: glass.width * 0.5,
         halfHeight: glass.height * 0.5,
         cornerRadius: glass.cornerRadius,
-        cornerTransitionSpeed: glass.cornerTransitionSpeed,
+        cornerSmoothing: glass.cornerSmoothing,
       } satisfies GlassInteractionEntry
 
       entriesByGlass.set(glass, interactionEntry)
@@ -139,13 +135,13 @@ export function measureGlassInteractionEntry(entry: GlassInteractionEntry, canva
     localX: localPoint.x,
     localY: localPoint.y,
     inside:
-      sdRoundRect(
+      sdSmoothRoundRect(
         centeredX,
         centeredY,
         entry.halfWidth,
         entry.halfHeight,
         entry.cornerRadius,
-        entry.cornerTransitionSpeed,
+        entry.cornerSmoothing,
       ) <= 0,
   }
 }

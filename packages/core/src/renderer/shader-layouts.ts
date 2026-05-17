@@ -26,7 +26,7 @@ export const GlobalsLayout = structLayout({
 export const ShapeDataLayout = structLayout({
   inverse0: vec4('a', 'c', 'e', 'minimumScale'),
   inverse1: vec4('b', 'd', 'f', 'cornerRadius'),
-  geometry: vec4('halfWidth', 'halfHeight', 'cornerTransitionSpeed'),
+  geometry: vec4('halfWidth', 'halfHeight', 'cornerSmoothing'),
   contentRange: vec4('start', 'count'),
 })
 

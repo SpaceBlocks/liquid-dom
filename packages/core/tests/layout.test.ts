@@ -17,6 +17,7 @@ import {
   Glass as SceneGlass,
   Html as SceneHtml,
 } from '../src/scene'
+import { DEFAULT_CORNER_SMOOTHING } from '../src/corner-smoothing'
 
 function fixedHtml(width: number, height: number) {
   const frame = new Frame({ width, height })
@@ -165,6 +166,45 @@ describe('layout UI tree', () => {
     glass.cornerRadius = 18
 
     expect(events).toEqual(['layout', 'frame'])
+  })
+
+  it('stores uniform glass corner radius and smoothing on scene nodes', () => {
+    const defaultGlass = new SceneGlass()
+    expect(defaultGlass.cornerRadius).toBe(0)
+    expect(defaultGlass.cornerSmoothing).toBe(DEFAULT_CORNER_SMOOTHING)
+
+    const glass = new SceneGlass({
+      cornerRadius: 12,
+      cornerSmoothing: 0.35,
+    })
+
+    expect(glass.cornerRadius).toBe(12)
+    expect(glass.cornerSmoothing).toBe(0.35)
+
+    glass.cornerRadius = 20
+    glass.cornerSmoothing = 2
+    expect(glass.cornerRadius).toBe(20)
+    expect(glass.cornerSmoothing).toBe(1)
+
+    glass.cornerRadius = -4
+    glass.cornerSmoothing = -1
+    expect(glass.cornerRadius).toBe(0)
+    expect(glass.cornerSmoothing).toBe(0)
+  })
+
+  it('propagates retained glass corner geometry changes and invalidates frames', () => {
+    const scene = new LayoutScene()
+    const container = scene.add(new GlassContainer())
+    const glass = container.add(new Glass({ cornerRadius: 10, cornerSmoothing: 0.2 }))
+    const events: string[] = []
+    scene.addInvalidationListener((event) => events.push(event.kind))
+
+    glass.cornerRadius = 24
+    glass.cornerSmoothing = 0.6
+
+    expect(glass.sceneNode.cornerRadius).toBe(24)
+    expect(glass.sceneNode.cornerSmoothing).toBe(0.6)
+    expect(events).toEqual(['frame', 'frame'])
   })
 
   it('stores blur on scene HTML nodes', () => {

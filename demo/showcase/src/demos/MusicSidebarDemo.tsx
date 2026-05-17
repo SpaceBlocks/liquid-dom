@@ -118,7 +118,7 @@ export default function MusicSidebarDemo() {
               specularFalloff={2}
             >
               <Transform x={SIDEBAR_X}>
-                <Glass cornerRadius={40}>
+                <Glass cornerRadius={50}>
                   <Overlay
                     overlay={
                       <Html sizing="fill">

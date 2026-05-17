@@ -763,6 +763,44 @@ describe('React layout components', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
+  it('passes Glass corner smoothing props through the retained ref', async () => {
+    const glassRef = createRef<GlassRef>()
+
+    const view = await renderReact(
+      <LayoutCanvas frameloop="demand" proposal={{ width: 320, height: 200 }}>
+        <GlassContainer>
+          <Glass
+            ref={glassRef}
+            cornerRadius={10}
+            cornerSmoothing={0.25}
+          >
+            <FixedHtml width={10} height={10} />
+          </Glass>
+        </GlassContainer>
+      </LayoutCanvas>,
+    )
+
+    expect(glassRef.current?.cornerRadius).toBe(10)
+    expect(glassRef.current?.cornerSmoothing).toBe(0.25)
+
+    await view.rerender(
+      <LayoutCanvas frameloop="demand" proposal={{ width: 320, height: 200 }}>
+        <GlassContainer>
+          <Glass
+            ref={glassRef}
+            cornerRadius={12}
+            cornerSmoothing={0.7}
+          >
+            <FixedHtml width={10} height={10} />
+          </Glass>
+        </GlassContainer>
+      </LayoutCanvas>,
+    )
+
+    expect(glassRef.current?.cornerRadius).toBe(12)
+    expect(glassRef.current?.cornerSmoothing).toBe(0.7)
+  })
+
   it('reports Glass hover and press state callbacks', async () => {
     const glassRef = createRef<GlassRef>()
     const onHover = vi.fn()

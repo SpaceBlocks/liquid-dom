@@ -6,6 +6,10 @@ import {
   HtmlCompositeParamsLayout,
   ShapeDataLayout,
 } from './renderer/shader-layouts'
+import {
+  CIRCULAR_CORNER_EXPONENT,
+  CORNER_SMOOTHING_EXPONENT_DELTA,
+} from './corner-smoothing'
 
 const FULLSCREEN_VERTEX = /* wgsl */ `
 struct VertexOutput {
@@ -169,6 +173,8 @@ const SPECULAR_DISTANCE_SCALE_FLOOR: f32 = 0.25;
 // Width of the antialiased feather around the specular band edge in device
 // pixels. This is separate from the configured specular band width.
 const SPECULAR_EDGE_FEATHER_PX: f32 = 1.0;
+const CIRCULAR_CORNER_EXPONENT: f32 = ${CIRCULAR_CORNER_EXPONENT.toFixed(8)};
+const CORNER_SMOOTHING_EXPONENT_DELTA: f32 = ${CORNER_SMOOTHING_EXPONENT_DELTA.toFixed(8)};
 
 // Keep the SDF value and its local normal together. The normal is used to decide
 // when smoothing is a real edge-to-edge blend instead of an overlap artifact.
@@ -210,29 +216,6 @@ fn smoothUnion(left: SdfSample, right: SdfSample, smoothing: f32) -> SdfSample {
   );
 }
 
-fn squircleLength(v: vec2f) -> f32 {
-  let a = abs(v);
-  return pow(pow(a.x, 4.0) + pow(a.y, 4.0), 0.25);
-}
-
-fn circularLength(v: vec2f) -> f32 {
-  return length(v);
-}
-
-fn sdRoundRect(localPos: vec2f, halfSize: vec2f, radius: f32, cornerTransitionSpeed: f32) -> f32 {
-  let cornerLimit = min(halfSize.x, halfSize.y);
-  let clampedRadius = min(radius, cornerLimit);
-  let blendDistance = max(cornerTransitionSpeed, 0.0001);
-  let circleBlend = clamp((radius - cornerLimit) / blendDistance, 0.0, 1.0);
-  let q = abs(localPos) - halfSize + vec2f(clampedRadius);
-  let cornerDistance = mix(
-    squircleLength(max(q, vec2f(0.0))),
-    circularLength(max(q, vec2f(0.0))),
-    circleBlend,
-  );
-  return cornerDistance + min(max(q.x, q.y), 0.0) - clampedRadius;
-}
-
 fn shapeLocalPos(shape: ShapeData, pos: vec2f) -> vec2f {
   return vec2f(
     shape.inverse0.x * pos.x + shape.inverse0.y * pos.y + shape.inverse0.z,
@@ -240,9 +223,31 @@ fn shapeLocalPos(shape: ShapeData, pos: vec2f) -> vec2f {
   );
 }
 
+fn superellipseLength(v: vec2f, exponent: f32) -> f32 {
+  let a = abs(v);
+  return pow(pow(a.x, exponent) + pow(a.y, exponent), 1.0 / exponent);
+}
+
+// CPU hit testing mirrors this in renderer/interaction.ts. If this p-norm
+// approximation changes, update that path at the same time.
+fn sdSmoothRoundRect(localPos: vec2f, halfSize: vec2f, radius: f32, cornerSmoothing: f32) -> f32 {
+  let cornerLimit = min(halfSize.x, halfSize.y);
+  let clampedRadius = min(max(radius, 0.0), cornerLimit);
+  let q = abs(localPos) - halfSize + vec2f(clampedRadius);
+  let maxSmoothingThatFits = select(
+    0.0,
+    max(cornerLimit / max(radius, SDF_EPSILON) - 1.0, 0.0),
+    radius > SDF_EPSILON,
+  );
+  let effectiveSmoothing = min(clamp(cornerSmoothing, 0.0, 1.0), maxSmoothingThatFits);
+  let exponent = CIRCULAR_CORNER_EXPONENT + effectiveSmoothing * CORNER_SMOOTHING_EXPONENT_DELTA;
+  let cornerDistance = superellipseLength(max(q, vec2f(0.0)), exponent);
+  return cornerDistance + min(max(q.x, q.y), 0.0) - clampedRadius;
+}
+
 fn shapeDistanceFromLocal(shape: ShapeData, localPos: vec2f) -> f32 {
   let halfSize = shape.geometry.xy;
-  let localDistance = sdRoundRect(
+  let localDistance = sdSmoothRoundRect(
     localPos - halfSize,
     halfSize,
     shape.inverse1.w,

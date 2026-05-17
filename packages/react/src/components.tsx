@@ -342,7 +342,7 @@ export function Glass({
   ref,
   children,
   cornerRadius,
-  cornerTransitionSpeed,
+  cornerSmoothing,
   pointerEvents,
   zIndex,
   onClick,
@@ -378,7 +378,7 @@ export function Glass({
   const effectivePointerEvents = pointerEvents ?? (hasPointerHandler || hasInteraction)
   const node = useStableNode(() => new LayoutGlass({
     cornerRadius,
-    cornerTransitionSpeed,
+    cornerSmoothing,
     pointerEvents: effectivePointerEvents,
     zIndex,
   }))
@@ -386,7 +386,7 @@ export function Glass({
   useAttachNode(node)
   const resolvedProps = resolveInteractiveGlassProps(node, {
     cornerRadius,
-    cornerTransitionSpeed,
+    cornerSmoothing,
     pointerEvents: effectivePointerEvents,
     zIndex,
   }, whileHover, whilePress, hovered, pressed, baseFallbackRef.current)

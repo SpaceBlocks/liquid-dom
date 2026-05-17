@@ -40,6 +40,7 @@ const glass = new Glass({
   width: 280,
   height: 180,
   cornerRadius: 48,
+  cornerSmoothing: 0.6,
   pointerEvents: true,
 })
 
@@ -114,6 +115,21 @@ const panelContent = new Html({
 glass.add(panelContent)
 ```
 
+### Glass Shape Options
+
+`Glass` uses a uniform `cornerRadius` and an analytic `cornerSmoothing` approximation for continuous, iOS-like corners:
+
+```ts
+const glass = new Glass({
+  width: 280,
+  height: 180,
+  cornerRadius: 32,
+  cornerSmoothing: 0.6,
+})
+```
+
+`cornerSmoothing: 0` produces circular rounded-rectangle corners. Higher values use a fuller p-norm corner curve; the default `0.6` is tuned for an iOS-like squircle. Very constrained corners automatically reduce smoothing back toward a circular shape.
+
 ### Node Relationship Rules
 
 Scene graph children must match the nearest non-group parent:
@@ -149,7 +165,7 @@ glass.addEventListener('click', (event) => {
 
 Supported event names are `click`, `pointerenter`, `pointerleave`, `pointermove`, `pointerdown`, `pointerup`, and `pointercancel`. `GlassPointerEvent` exposes the source `glass`, `renderer`, native pointer event, canvas coordinates, glass-local coordinates, and whether the pointer is inside the shape.
 
-Glass pointer hits are based on the individual glass SDF, not fused bridge regions between neighboring glass nodes. Hosted DOM elements can still receive normal browser pointer events.
+Glass pointer hits are based on the individual glass shape, not fused bridge regions between neighboring glass nodes. Hosted DOM elements can still receive normal browser pointer events.
 
 ### Renderer
 

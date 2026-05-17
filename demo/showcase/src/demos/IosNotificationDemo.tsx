@@ -30,8 +30,7 @@ const ACTION_GAP = 18
 const OPTIONS_X = NOTIFICATION_WIDTH / 2 - ACTION_WIDTH * 1.5 - ACTION_GAP
 const CLEAR_X = OPTIONS_X + ACTION_WIDTH + ACTION_GAP
 const OPEN_OFFSET = OPTIONS_X - ACTION_WIDTH / 2 - ACTION_GAP - NOTIFICATION_WIDTH / 2
-const NOTIFICATION_CORNER_RADIUS = 41
-const ACTION_CORNER_RADIUS = 39
+const NOTIFICATION_CORNER_RADIUS = 44
 const ACTION_HOVER_SCALE = 1.035
 const ACTION_PRESS_SCALE = 0.96
 const ACTION_SCALE_TRANSITION = spring({ stiffness: 520, damping: 42 })
@@ -294,7 +293,7 @@ function ActionGlass({
       }}
     >
       <Glass
-        cornerRadius={ACTION_CORNER_RADIUS}
+        cornerRadius={NOTIFICATION_CORNER_RADIUS}
         pointerEvents
         onHover={setHovered}
         onPress={setPressed}
