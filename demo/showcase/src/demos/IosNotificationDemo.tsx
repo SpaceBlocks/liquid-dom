@@ -37,8 +37,8 @@ const ACTION_SCALE_TRANSITION = spring({ stiffness: 520, damping: 42 })
 const NOTIFICATION_OFFSET_TRANSITION = spring({ stiffness: 520, damping: 44 })
 const NOTIFICATION_RUBBERBAND = 0.18
 const NOTIFICATION_ORIGIN = {
-  x: NOTIFICATION_WIDTH / 2,
-  y: NOTIFICATION_HEIGHT / 2,
+  x: 0.5,
+  y: 0.5,
 }
 
 type GlassDragBind = Pick<GlassProps, 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'>
@@ -247,11 +247,11 @@ function NotificationScene({ nightMode }: { nightMode: boolean }) {
           specularOpacity={0.6}
         >
           <ZStack alignment="center">
-            <Transform x={OPTIONS_X} origin={{ x: ACTION_WIDTH / 2, y: ACTION_HEIGHT / 2 }}>
+            <Transform x={OPTIONS_X} origin={{ x: 0.5, y: 0.5 }}>
               <ActionGlass label="Options" labelRef={optionsLabelRef} />
             </Transform>
 
-            <Transform x={CLEAR_X} origin={{ x: ACTION_WIDTH / 2, y: ACTION_HEIGHT / 2 }}>
+            <Transform x={CLEAR_X} origin={{ x: 0.5, y: 0.5 }}>
               <ActionGlass label="Clear" labelRef={clearLabelRef} />
             </Transform>
 
@@ -298,7 +298,7 @@ function ActionGlass({
 
   return (
     <Transform
-      origin={{ x: ACTION_WIDTH / 2, y: ACTION_HEIGHT / 2 }}
+      origin={{ x: 0.5, y: 0.5 }}
       scaleX={actionScale}
       scaleY={actionScale}
       transition={{

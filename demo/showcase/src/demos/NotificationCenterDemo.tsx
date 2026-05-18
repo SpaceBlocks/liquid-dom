@@ -433,7 +433,7 @@ function CenterButton({
     <Transform
       scaleX={scale}
       scaleY={scale}
-      origin={{ x: BUTTON_SIZE / 2, y: BUTTON_SIZE / 2 }}
+      origin={{ x: 0.5, y: 0.5 }}
       transition={{
         scaleX: BUTTON_SCALE_TRANSITION,
         scaleY: BUTTON_SCALE_TRANSITION,

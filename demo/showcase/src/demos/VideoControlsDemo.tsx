@@ -5,7 +5,6 @@ import {
   GlassContainer,
   Html,
   LayoutCanvas,
-  Overlay,
   spring,
   Transform,
   ZStack,
@@ -211,7 +210,7 @@ function ControlButton({
       x={x}
       scaleX={scale}
       scaleY={scale}
-      origin={{ x: size / 2, y: size / 2 }}
+      origin={{ x: 0.5, y: 0.5 }}
       transition={{
         x: CONTROL_TRANSITION,
         scaleX: BUTTON_SCALE_TRANSITION,

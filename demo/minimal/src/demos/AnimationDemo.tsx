@@ -19,7 +19,7 @@ import {
 
 const CARD_WIDTH = 142
 const CARD_HEIGHT = 104
-const CARD_ORIGIN = { x: CARD_WIDTH / 2, y: CARD_HEIGHT / 2 }
+const CARD_ORIGIN = { x: 0.5, y: 0.5 }
 const FAST_SPRING = spring({ stiffness: 520, damping: 42 })
 const LAYOUT_SPRING = spring({ stiffness: 360, damping: 34 })
 const TIMELINE_SPRING = spring({ stiffness: 480, damping: 38 })

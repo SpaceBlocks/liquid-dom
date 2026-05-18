@@ -114,10 +114,23 @@ export type HtmlOptions = {
   sizing?: DomLeafSizing
 }
 
+/** Unit-space origin for a retained layout transform. `{ x: 0, y: 0 }` is top-left and `{ x: 0.5, y: 0.5 }` is center. */
+export type UnitPoint = {
+  x: number
+  y: number
+}
+
 /** Constructor options for {@link Transform}. */
-export type TransformOptions = Partial<SceneTransform>
+export type TransformOptions = Omit<Partial<SceneTransform>, 'origin'> & {
+  /** Transform origin as a unit point in the layout node's measured bounds. */
+  origin?: UnitPoint
+}
 
 function clonePoint(point?: Point): Point {
+  return point ? { x: point.x, y: point.y } : { x: 0, y: 0 }
+}
+
+function cloneUnitPoint(point?: UnitPoint): UnitPoint {
   return point ? { x: point.x, y: point.y } : { x: 0, y: 0 }
 }
 
@@ -804,7 +817,7 @@ export class Transform extends SingleChildUiNode<RetainedLayoutNode, SceneGroup>
   private _scaleX = 1
   private _scaleY = 1
   private _rotation = 0
-  private _origin: Point = { x: 0, y: 0 }
+  private _origin: UnitPoint = { x: 0, y: 0 }
 
   constructor(options: TransformOptions = {}) {
     super(createNoop(), new SceneGroup())
@@ -813,7 +826,7 @@ export class Transform extends SingleChildUiNode<RetainedLayoutNode, SceneGroup>
     this._scaleX = options.scaleX ?? 1
     this._scaleY = options.scaleY ?? 1
     this._rotation = options.rotation ?? 0
-    this._origin = clonePoint(options.origin)
+    this._origin = cloneUnitPoint(options.origin)
   }
 
   get x(): number {
@@ -886,16 +899,16 @@ export class Transform extends SingleChildUiNode<RetainedLayoutNode, SceneGroup>
     this.invalidateFrame('rotation')
   }
 
-  get origin(): Point {
+  get origin(): UnitPoint {
     return this._origin
   }
 
-  set origin(value: Point) {
+  set origin(value: UnitPoint) {
     if (this._origin.x === value.x && this._origin.y === value.y) {
       return
     }
 
-    this._origin = clonePoint(value)
+    this._origin = cloneUnitPoint(value)
     this.syncSceneTransform()
     this.invalidateFrame('origin')
   }
@@ -912,7 +925,10 @@ export class Transform extends SingleChildUiNode<RetainedLayoutNode, SceneGroup>
     this.sceneNode.scaleX = this._scaleX
     this.sceneNode.scaleY = this._scaleY
     this.sceneNode.rotation = this._rotation
-    this.sceneNode.origin = clonePoint(this._origin)
+    this.sceneNode.origin = {
+      x: this._origin.x * (rect?.width ?? 0),
+      y: this._origin.y * (rect?.height ?? 0),
+    }
   }
 }
 

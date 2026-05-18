@@ -209,6 +209,8 @@ The retained `Html` layout node exposes the same compositing options as scene `H
 
 Some retained layout nodes accept exactly one direct child: `Frame`, `Padding`, `Transform`, `GlassContainer`, and `Glass`. If you need multiple children inside one of these nodes, put those children inside a multi-child layout node such as `HStack`, `VStack`, or `ZStack`, then use that layout node as the single child.
 
+Retained `Transform.origin` is a unit point in the measured layout bounds, where `{ x: 0, y: 0 }` is top-left and `{ x: 0.5, y: 0.5 }` is center. The retained layout node resolves that unit point to the CSS-pixel scene graph origin after measurement.
+
 The synchronized scene graph still follows the scene node relationship rules above. All nested children have to conform to the parent rules, even when they pass through layout-only nodes.
 
 ### WebGPU Core For Adapters

@@ -293,7 +293,7 @@ export default function MenuDemo() {
                               <Transform
                                 scaleX={open ? 1 : CLOSED_MENU_CONTENT_SCALE}
                                 scaleY={open ? 1 : CLOSED_MENU_CONTENT_SCALE}
-                                origin={{ x: MENU_WIDTH / 2, y: MENU_HEIGHT / 2 }}
+                                origin={{ x: 0.5, y: 0.5 }}
                                 transition={{
                                   scaleX: CONTENT_BLUR_TRANSITION,
                                   scaleY: CONTENT_BLUR_TRANSITION,
@@ -323,7 +323,7 @@ export default function MenuDemo() {
                         y={open ? BUTTON_OPEN_Y : 0}
                         scaleX={buttonScale}
                         scaleY={buttonScale}
-                        origin={{ x: BUTTON_SIZE / 2, y: BUTTON_SIZE / 2 }}
+                        origin={{ x: 0.5, y: 0.5 }}
                         transition={{
                           x: open
                             ? BUTTON_OPEN_POSITION_TRANSITION

@@ -236,7 +236,7 @@ function buildLayoutScene(): LayoutRefs {
     x: INITIAL_TRANSFORM_OFFSET,
     y: -18,
     rotation: -0.08,
-    origin: { x: 52, y: 42 },
+    origin: { x: 0.5, y: 0.5 },
   }))
   const featureFrame = featureTransform.add(new Frame({
     width: 112,

@@ -140,7 +140,7 @@ describe('layout UI tree', () => {
       scaleX: 2,
       scaleY: 0.5,
       rotation: 0.25,
-      origin: { x: 1, y: 2 },
+      origin: { x: 0.1, y: 0.2 },
     }))
     transform.add(fixedHtml(10, 10).frame)
 
@@ -152,6 +152,25 @@ describe('layout UI tree', () => {
     expect(transform.sceneNode.scaleY).toBe(0.5)
     expect(transform.sceneNode.rotation).toBe(0.25)
     expect(transform.sceneNode.origin).toEqual({ x: 1, y: 2 })
+  })
+
+  it('resolves transform unit origins from measured layout dimensions', () => {
+    const scene = new LayoutScene()
+    const transform = scene.add(new Transform({
+      origin: { x: 0.5, y: 0.5 },
+    }))
+    const frame = transform.add(fixedHtml(80, 40).frame)
+
+    scene.layout({})
+
+    expect(transform.origin).toEqual({ x: 0.5, y: 0.5 })
+    expect(transform.sceneNode.origin).toEqual({ x: 40, y: 20 })
+
+    frame.width = 120
+    frame.height = 60
+    scene.layout({})
+
+    expect(transform.sceneNode.origin).toEqual({ x: 60, y: 30 })
   })
 
   it('emits layout and frame invalidations from retained node mutations', () => {

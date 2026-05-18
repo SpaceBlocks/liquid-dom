@@ -22,7 +22,7 @@ const INITIAL_COLUMN_SPACING = 88
 const INITIAL_ROW_TRANSFORM = 28
 const INITIAL_GRID_X = 0
 const INITIAL_GRID_Y = 0
-const CARD_ORIGIN = { x: CARD_WIDTH / 2, y: CARD_HEIGHT / 2 }
+const CARD_ORIGIN = { x: 0.5, y: 0.5 }
 
 export default function SimpleLayoutSceneDemo() {
   const { columnGap, rowGap, rowTransform, gridX, gridY } = useControls('Simple layout', {

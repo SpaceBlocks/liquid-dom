@@ -27,7 +27,7 @@ extend(THREE as unknown as Parameters<typeof extend>[0])
 
 const GLASS_WIDTH = 260
 const GLASS_HEIGHT = 148
-const GLASS_ORIGIN = { x: GLASS_WIDTH / 2, y: GLASS_HEIGHT / 2 }
+const GLASS_ORIGIN = { x: 0.5, y: 0.5 }
 
 type ControlsState = {
   blur: number

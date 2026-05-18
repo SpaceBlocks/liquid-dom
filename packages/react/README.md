@@ -78,7 +78,7 @@ These components mirror the retained layout classes from `@liquid-dom/core/layou
 - `HStack`, `VStack`, and `ZStack` arrange children.
 - `Frame`, `Padding`, and `Spacer` constrain or expand layout.
 - `Background` and `Overlay` add decoration slots that do not affect content size.
-- `Transform` applies scene transforms after layout.
+- `Transform` applies scene transforms after layout. Its `origin` is a unit point in the measured layout bounds, where `{ x: 0, y: 0 }` is top-left and `{ x: 0.5, y: 0.5 }` is center.
 
 All layout components expose refs to their retained nodes and accept a `transition` prop for animatable property changes.
 

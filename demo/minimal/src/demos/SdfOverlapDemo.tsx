@@ -17,7 +17,7 @@ import {
 
 const GLASS_WIDTH = 220
 const GLASS_HEIGHT = 132
-const GLASS_ORIGIN = { x: GLASS_WIDTH / 2, y: GLASS_HEIGHT / 2 }
+const GLASS_ORIGIN = { x: 0.5, y: 0.5 }
 const INITIAL_DISTANCE = 34
 const INITIAL_VERTICAL_OFFSET = 0
 const INITIAL_SHAPE_SCALE_X = 1
