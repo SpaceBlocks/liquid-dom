@@ -192,15 +192,11 @@ function LightAnimationBinder({
 function ControlCard({ children }: { children: ReactNode }) {
   return (
     <Glass cornerRadius={CARD_RADIUS}>
-      <Overlay
-        overlay={
-          <Html sizing="fill">
-            <div className={styles.cardContent}>{children}</div>
-          </Html>
-        }
-      >
-        <Frame width={CARD_SIZE} height={CARD_SIZE} />
-      </Overlay>
+      <Frame width={CARD_SIZE} height={CARD_SIZE}>
+        <Html sizing="fill">
+          <div className={styles.cardContent}>{children}</div>
+        </Html>
+      </Frame>
     </Glass>
   )
 }

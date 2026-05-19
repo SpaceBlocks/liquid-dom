@@ -120,15 +120,11 @@ export default function MusicSidebarDemo() {
             >
               <Transform x={SIDEBAR_X}>
                 <Glass cornerRadius={50}>
-                  <Overlay
-                    overlay={
-                      <Html sizing="fill">
-                        <Sidebar />
-                      </Html>
-                    }
-                  >
-                    <Frame width={SIDEBAR_WIDTH} height={SIDEBAR_HEIGHT} />
-                  </Overlay>
+                  <Frame width={SIDEBAR_WIDTH} height={SIDEBAR_HEIGHT}>
+                    <Html sizing="fill">
+                      <Sidebar />
+                    </Html>
+                  </Frame>
                 </Glass>
               </Transform>
             </GlassContainer>

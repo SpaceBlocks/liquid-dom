@@ -268,15 +268,11 @@ function NotificationScene({ nightMode }: { nightMode: boolean }) {
                 onPointerEnter={handlePointerEnter}
                 onPointerLeave={handlePointerLeave}
               >
-                <Overlay
-                  overlay={
-                    <Html sizing="fill">
-                      <NotificationContent />
-                    </Html>
-                  }
-                >
-                  <Frame width={NOTIFICATION_WIDTH} height={NOTIFICATION_HEIGHT} />
-                </Overlay>
+                <Frame width={NOTIFICATION_WIDTH} height={NOTIFICATION_HEIGHT}>
+                  <Html sizing="fill">
+                    <NotificationContent />
+                  </Html>
+                </Frame>
               </Glass>
             </Transform>
           </ZStack>
@@ -313,20 +309,16 @@ function ActionGlass({
         onHover={setHovered}
         onPress={setPressed}
       >
-        <Overlay
-          overlay={
-            <Html sizing="fill">
-              <div
-                ref={labelRef}
-                className={styles.actionLabel}
-              >
-                {label}
-              </div>
-            </Html>
-          }
-        >
-          <Frame width={ACTION_WIDTH} height={ACTION_HEIGHT} />
-        </Overlay>
+        <Frame width={ACTION_WIDTH} height={ACTION_HEIGHT}>
+          <Html sizing="fill">
+            <div
+              ref={labelRef}
+              className={styles.actionLabel}
+            >
+              {label}
+            </div>
+          </Html>
+        </Frame>  
       </Glass>
     </Transform>
   )
