@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useDrag } from '@use-gesture/react'
-import type { GlassPointerEvent } from '@liquid-dom/core'
 import {
   Frame,
   Glass,
@@ -193,7 +192,7 @@ function NotificationScene({ nightMode }: { nightMode: boolean }) {
     setCanvasCursor(null)
   }
 
-  const bind = useDrag<GlassPointerEvent | PointerEvent>(({
+  const bind = useDrag(({
     active,
     first,
     last,
