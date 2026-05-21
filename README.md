@@ -2,6 +2,16 @@
 
 <img width="1796" height="780" alt="Liquid DOM Showcase 2026-05-21T20 25 18" src="https://github.com/user-attachments/assets/c6283990-8a0e-48f6-865d-ca62f6ecbe49" />
 
+<table>
+  <tr>
+    <td><img alt="Liquid DOM Showcase 2026-05-21T20 35 00@2x" src="https://github.com/user-attachments/assets/f94be645-033a-4257-bfcc-eac718b1f16d" /></td>
+    <td><img alt="Liquid DOM Showcase 2026-05-21T20 35 14@2x" src="https://github.com/user-attachments/assets/dbdce5f1-1457-4f56-9131-ed97c0a3acea" /></td>
+    <td><img alt="Liquid DOM Showcase 2026-05-21T20 35 32@2x" src="https://github.com/user-attachments/assets/dc4dd675-0dc0-4a84-bd7b-331ed951d8ce" /></td>
+    <td><img alt="Liquid DOM Showcase 2026-05-21T20 36 01@2x" src="https://github.com/user-attachments/assets/d1b0706e-3279-4946-bd47-e874db9f8a22" /></td>
+    <td><img alt="Liquid DOM Showcase 2026-05-21T20 35 43@2x" src="https://github.com/user-attachments/assets/c2ca03b0-607e-478d-a61a-4c4146feb1e1" /></td>
+  </tr>
+</table>
+
 Liquid DOM is a monorepo for WebGPU liquid-glass rendering, React bindings, Three.js integration, React Three Fiber integration, and the renderer-agnostic layout engine used by the higher-level APIs.
 
 The packages are split by integration layer. Use the lowest-level package that matches the renderer you own, or the higher-level React packages when you want declarative layout.
