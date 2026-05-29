@@ -2,19 +2,13 @@ import './style.css'
 import { ThreeLayoutDemo } from './app/ThreeLayoutDemo'
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')
-const tileSizeReadout = document.querySelector<HTMLElement>('#tile-size')
-const nodeCountReadout = document.querySelector<HTMLElement>('#node-count')
 
 try {
-  if (!canvas || !tileSizeReadout || !nodeCountReadout) {
+  if (!canvas) {
     throw new Error('Demo elements were not found.')
   }
 
-  const demo = await ThreeLayoutDemo.create({
-    canvas,
-    tileSizeReadout,
-    nodeCountReadout,
-  })
+  const demo = await ThreeLayoutDemo.create({ canvas })
   demo.start()
 } catch (error) {
   console.error(error)

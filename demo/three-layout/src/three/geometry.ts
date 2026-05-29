@@ -1,9 +1,12 @@
-import { ExtrudeGeometry, Shape } from 'three'
+import { CatmullRomCurve3, ExtrudeGeometry, Shape, TubeGeometry, Vector3 } from 'three'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 import type { Font } from 'three/examples/jsm/loaders/FontLoader.js'
 import {
   GRID_COLUMNS,
   GRID_ROWS,
+  LISSAJOUS_HEIGHT_RATIO,
+  LISSAJOUS_TUBE_RADIUS,
+  LISSAJOUS_WIDTH_RATIO,
   TILE_BEVEL_SIZE,
   TILE_BEVEL_THICKNESS,
   TILE_CORNER_RADIUS,
@@ -87,6 +90,27 @@ export function createTitleGeometry(text: string, font: Font) {
   geometry.computeVertexNormals()
 
   return { geometry, size: { width, height } }
+}
+
+export function createLissajousGeometry(size: number, phase: number) {
+  const points: Vector3[] = []
+  const pointCount = 160
+  const radiusX = size * LISSAJOUS_WIDTH_RATIO * 0.5
+  const radiusY = size * LISSAJOUS_HEIGHT_RATIO * 0.5
+
+  for (let index = 0; index < pointCount; index += 1) {
+    const t = (index / pointCount) * Math.PI * 2
+    points.push(new Vector3(
+      Math.sin(3 * t + phase) * radiusX,
+      Math.sin(2 * t) * radiusY,
+      0,
+    ))
+  }
+
+  const curve = new CatmullRomCurve3(points, true, 'centripetal')
+  const geometry = new TubeGeometry(curve, pointCount, LISSAJOUS_TUBE_RADIUS, 8, true)
+  geometry.computeVertexNormals()
+  return geometry
 }
 
 function normalizeCornerRadii(width: number, height: number, input: CornerRadiiInput): CornerRadii {

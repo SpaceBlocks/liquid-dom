@@ -19,6 +19,15 @@ export const TILE_BEVEL_SIZE = 6
 export const TILE_BEVEL_THICKNESS = 5
 export const TILE_HOVER_Z_LIFT = 0
 
+// Lissajous curves
+export const LISSAJOUS_WIDTH_RATIO = 0.5
+export const LISSAJOUS_HEIGHT_RATIO = 0.43
+export const LISSAJOUS_TUBE_RADIUS = 4.2
+export const LISSAJOUS_Z = TILE_DEPTH * 1.15
+export const LISSAJOUS_HOVER_Z_LIFT = 96
+export const LISSAJOUS_HOVER_SCALE = 1.28
+export const LISSAJOUS_HOVER_SPIN_SPEED = 0.55
+
 // Panel geometry
 export const BACKGROUND_PADDING = 35
 export const BACKGROUND_CORNER_RADIUS = TILE_PANEL_CORNER_RADIUS + BACKGROUND_PADDING
@@ -48,10 +57,12 @@ export const CAMERA_VERTICAL_OFFSET = -90
 // Animation
 export const LAYOUT_SPRING = spring({ stiffness: 300, damping: 20 })
 export const TILE_LIFT_SPRING = spring({ stiffness: 500, damping: 15 })
+export const LISSAJOUS_ELEVATION_SPRING = spring({ stiffness: 500, damping: 48 })
+export const LISSAJOUS_ROTATION_RESET_SPRING = spring({ stiffness: 240, damping: 30 })
 
 // Environment map
 export const ENVIRONMENT_MAP_URL =
-  'https://raw.githack.com/pmndrs/drei-assets/456060a26bbeb8fdf79326f224b6d99b8bcce736/hdri/forest_slope_1k.hdr'
+  'https://raw.githubusercontent.com/pmndrs/drei-assets/456060a26bbeb8fdf79326f224b6d99b8bcce736/hdri/forest_slope_1k.hdr'
 export const ENVIRONMENT_BACKGROUND_BLUR = 0.2
 export const ENVIRONMENT_BACKGROUND_INTENSITY = 0.1
 export const ENVIRONMENT_LIGHTING_INTENSITY = 0.72

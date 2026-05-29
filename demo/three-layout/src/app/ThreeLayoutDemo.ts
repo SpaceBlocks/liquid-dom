@@ -18,7 +18,6 @@ import { addLights, createCamera, createRenderer, createScene, createStage } fro
 import { renderRectForLayoutRect } from '../layout/rects'
 import {
   gridProps,
-  hoverTileSizeReadout,
   layoutState,
   sameHoverTarget,
   tileMeasureKey,
@@ -27,14 +26,20 @@ import { addPanelToStage, createPanel, createRootStack, disposePanel } from '../
 import { applyRectMesh } from '../views/rectMesh'
 import { applyTileRect } from '../views/tile'
 import { applyTitleRect } from '../views/title'
-import { setRectTarget, setTileZTarget, stopPanelAnimations, tileTargetZ } from './animation'
+import {
+  advanceTileCurveRotation,
+  isTileHovered,
+  setRectTarget,
+  setTileCurveTarget,
+  setTileZTarget,
+  stopPanelAnimations,
+  tileTargetZ,
+} from './animation'
 import type { DomRefs, EnvironmentMap, HoverTarget, PanelView, TileView } from '../types'
-import type { LayoutDebugStats, LayoutNode } from '@liquid-dom/layout'
+import type { LayoutNode } from '@liquid-dom/layout'
 
 export class ThreeLayoutDemo {
   private readonly canvas: HTMLCanvasElement
-  private readonly tileSizeReadout: HTMLElement
-  private readonly nodeCountReadout: HTMLElement
   private readonly renderer: WebGLRenderer
   private readonly scene: Scene
   private readonly camera: PerspectiveCamera
@@ -55,6 +60,7 @@ export class ThreeLayoutDemo {
   private lastDpr = 0
   private animationFrameId: number | null = null
   private lastAnimationTime = 0
+  private frameDeltaMilliseconds = 0
   private started = false
   private disposed = false
 
@@ -72,8 +78,6 @@ export class ThreeLayoutDemo {
     titleFont: Font,
   ) {
     this.canvas = options.canvas
-    this.tileSizeReadout = options.tileSizeReadout
-    this.nodeCountReadout = options.nodeCountReadout
     this.renderer = renderer
     this.environmentMap = environmentMap
     this.hitProxyGeometry = new PlaneGeometry(1, 1)
@@ -142,10 +146,10 @@ export class ThreeLayoutDemo {
       tile.node.measureKey = tileMeasureKey(tile.panelIndex, tile.tileIndex)
     }
 
-    return this.layoutEngine.layout({})
+    this.layoutEngine.layout({})
   }
 
-  private updateLayoutTargets(width: number, height: number, stats: LayoutDebugStats, immediate: boolean) {
+  private updateLayoutTargets(width: number, height: number, immediate: boolean) {
     const rootRect = this.rootStack.layout?.absoluteRect
     if (!rootRect) return
 
@@ -184,11 +188,10 @@ export class ThreeLayoutDemo {
           (nextRect) => applyTileRect(tile, nextRect),
         )
         setTileZTarget(this.animationManager, tile, tileTargetZ(tile), immediate)
+        setTileCurveTarget(this.animationManager, tile, isTileHovered(tile), immediate)
       }
     }
 
-    this.tileSizeReadout.textContent = `${hoverTileSizeReadout()} px`
-    this.nodeCountReadout.textContent = String(stats.nodes)
     if (immediate || layoutState.hoveredTile === null) {
       this.frameCameraToRootStack(width, height)
     }
@@ -250,6 +253,9 @@ export class ThreeLayoutDemo {
       for (const tile of panel.tiles) {
         if (!tile.currentRect) continue
         applyTileRect(tile, tile.currentRect)
+        if (isTileHovered(tile)) {
+          advanceTileCurveRotation(tile, this.frameDeltaMilliseconds)
+        }
       }
     }
 
@@ -265,8 +271,8 @@ export class ThreeLayoutDemo {
 
   private layoutAndRender({ immediate = false }: { immediate?: boolean } = {}) {
     const { width, height } = this.syncViewport()
-    const stats = this.measureLayout()
-    this.updateLayoutTargets(width, height, stats, immediate)
+    this.measureLayout()
+    this.updateLayoutTargets(width, height, immediate)
 
     if (immediate) {
       this.finishAnimation()
@@ -293,10 +299,12 @@ export class ThreeLayoutDemo {
   private readonly animateLayout = (now: number) => {
     const delta = this.lastAnimationTime === 0 ? 16.7 : now - this.lastAnimationTime
     this.lastAnimationTime = now
+    this.frameDeltaMilliseconds = delta
     this.animationManager.tick(delta)
     this.renderCurrentLayout()
+    this.frameDeltaMilliseconds = 0
 
-    if (this.animationManager.active) {
+    if (this.animationManager.active || layoutState.hoveredTile !== null) {
       this.animationFrameId = requestAnimationFrame(this.animateLayout)
       return
     }

@@ -50,6 +50,7 @@ export function addPanelToStage(stage: Group, panel: PanelView) {
   stage.add(panel.title.mesh)
   for (const tile of panel.tiles) {
     stage.add(tile.mesh)
+    stage.add(tile.curveMesh)
     stage.add(tile.hitMesh)
   }
 }
@@ -62,6 +63,8 @@ export function disposePanel(panel: PanelView) {
   for (const tile of panel.tiles) {
     tile.mesh.geometry.dispose()
     tile.mesh.material.dispose()
+    tile.curveMesh.geometry.dispose()
+    tile.curveMesh.material.dispose()
   }
 }
 

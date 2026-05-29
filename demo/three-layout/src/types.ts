@@ -6,6 +6,7 @@ import type {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
+  TubeGeometry,
   WebGLRenderTarget,
 } from 'three'
 import type { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
@@ -54,10 +55,18 @@ export type RectMeshView = AnimatedRectView & {
 export type TileView = RectMeshView & {
   node: LeafNode
   hitMesh: Mesh<PlaneGeometry, MeshBasicMaterial>
+  curveMesh: Mesh<TubeGeometry, MeshStandardMaterial | MeshPhysicalMaterial>
   panelIndex: number
   tileIndex: number
+  curveGeometrySize: number
   currentZ: number | null
   targetZ: number | null
+  currentCurveZ: number | null
+  targetCurveZ: number | null
+  currentCurveScale: number | null
+  targetCurveScale: number | null
+  currentCurveRotationY: number | null
+  targetCurveRotationY: number | null
 }
 
 export type TitleView = AnimatedRectView & {
@@ -81,6 +90,4 @@ export type EnvironmentMap = {
 
 export type DomRefs = {
   canvas: HTMLCanvasElement
-  tileSizeReadout: HTMLElement
-  nodeCountReadout: HTMLElement
 }

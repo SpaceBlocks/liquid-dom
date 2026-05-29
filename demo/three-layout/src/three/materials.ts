@@ -34,6 +34,22 @@ export function createTitleMaterial() {
   })
 }
 
+export function createLissajousMaterial() {
+  return new MeshPhysicalMaterial({
+    color: 0xffffff,
+    attenuationColor: 0xffffff,
+    attenuationDistance: 90,
+    envMapIntensity: 1.05,
+    ior: 1.36,
+    metalness: 0,
+    opacity: 0.72,
+    roughness: 0.12,
+    thickness: 14,
+    transmission: 0.72,
+    transparent: true,
+  })
+}
+
 export function createPanelGlassMaterial() {
   return new MeshPhysicalMaterial({
     color: PANEL_GLASS_COLOR,

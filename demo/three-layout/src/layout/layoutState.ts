@@ -54,10 +54,6 @@ export function gridProps(): GridLayoutProps {
   }
 }
 
-export function hoverTileSizeReadout() {
-  return Math.round(layoutState.hoveredTile === null ? layoutState.tileSize : layoutState.tileSize * HOVER_SCALE)
-}
-
 export function sameHoverTarget(a: HoverTarget | null, b: HoverTarget | null) {
   return a?.panelIndex === b?.panelIndex && a?.tileIndex === b?.tileIndex
 }
